@@ -112,9 +112,14 @@ type Peer struct {
 	Type   string `json:"type"`
 }
 
+// Mention is one entry in the mentions array. The platform's substitution
+// engine tries to replace `@<Handle>` in the message text first (globally
+// unique form), then falls back to `@<Name>` (short form, can collide across
+// owners). Always populate Handle when you have it.
 type Mention struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Handle string `json:"handle,omitempty"`
 }
 
 // ListPeers returns the agent's peer network (other agents and users it can

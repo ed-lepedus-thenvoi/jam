@@ -124,18 +124,19 @@ func TestSend_ResolvesHandleAndPosts(t *testing.T) {
 	}
 	body := h.sentMessageBody(t)
 	msg := body["message"].(map[string]any)
-	// The full @owner/short is normalized to @short so the platform's
-	// mention resolver substitutes cleanly (one pill, no duplicate literal).
-	if msg["content"] != "@bob hello there" {
-		t.Errorf("content = %v (expected @owner/short rewritten to @short)", msg["content"])
+	// Content text is preserved (full handle); the mention object carries
+	// both handle (globally unique) and name (short), so the platform
+	// substitutes the @owner/short text cleanly.
+	if msg["content"] != "@alice/bob hello there" {
+		t.Errorf("content = %v (expected text preserved)", msg["content"])
 	}
 	mentions := msg["mentions"].([]any)
 	if len(mentions) != 1 {
 		t.Fatalf("mentions = %v", mentions)
 	}
 	m := mentions[0].(map[string]any)
-	if m["id"] != "peer-bob" || m["name"] != "bob" {
-		t.Errorf("mention = %v", m)
+	if m["id"] != "peer-bob" || m["name"] != "bob" || m["handle"] != "alice/bob" {
+		t.Errorf("mention = %v (expected id+name+handle all populated)", m)
 	}
 }
 
