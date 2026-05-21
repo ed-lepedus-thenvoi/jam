@@ -1,0 +1,11 @@
+# Claude Code local settings (may contain API keys in allow-listed commands)
+.claude/settings.local.json
+
+# Go build artifacts
+/jam
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
