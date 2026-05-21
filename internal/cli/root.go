@@ -43,6 +43,7 @@ func newRootCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Comma
 	cmd.AddCommand(newInboxCmd(stdout, env, getProfile))
 	cmd.AddCommand(newAckCmd(stdout, env, getProfile))
 	cmd.AddCommand(newChatCmd(stdout, stderr, env, getProfile))
+	cmd.AddCommand(newPluginCmd(stdout, stderr))
 	cmd.AddCommand(newInternalBridgeCmd(stdout, stderr, env))
 	return cmd
 }

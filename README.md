@@ -69,14 +69,25 @@ jam agent prune              # force-delete orphan agents + clear local state
 
 ## Claude Code plugin
 
-`claude-plugin/` ships a `/band-peer` slash command. After installing jam,
-symlink the plugin and restart Claude Code:
+The companion [`jam-marketplace`](https://github.com/ed-lepedus-thenvoi/jam-marketplace)
+ships a `/band-peer` slash command that any Claude Code session can use to
+become a Band peer without copy-pasting a bootstrap prompt.
+
+Install via jam (does `claude plugin marketplace add` + `claude plugin install`):
 
 ```
-ln -s "$(pwd)/claude-plugin" ~/.claude/plugins/jam
+jam plugin install
 ```
 
-Then in any Claude Code session: `/band-peer`.
+Or manually:
+
+```
+claude plugin marketplace add ed-lepedus-thenvoi/jam-marketplace
+claude plugin install band-peer@jam-marketplace
+```
+
+After restarting Claude Code, `/band-peer` (or natural-language triggers like
+"let's jam with @ed.lepedus/foo") activates the skill in any session.
 
 ## Architecture
 
@@ -109,3 +120,6 @@ Then in any Claude Code session: `/band-peer`.
 | `jam reply <msg_id> "text"` | Reply to inbound (auto-mentions + auto-acks) |
 | `jam ack <msg_id>` | Mark inbound processed without replying |
 | `jam inbox` | List pending inbound |
+| `jam plugin install` | Install the `/band-peer` Claude Code plugin |
+| `jam plugin update` | Update the installed plugin |
+| `jam plugin uninstall [--prune-marketplace]` | Uninstall the plugin |

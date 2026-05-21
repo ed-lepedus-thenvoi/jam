@@ -1,8 +1,0 @@
-{
-  "name": "jam",
-  "description": "Coordinate Claude Code sessions with remote agents and humans on the Band platform via the jam CLI",
-  "author": {
-    "name": "thenvoi",
-    "email": "ed.lepedus@thenvoi.com"
-  }
-}
