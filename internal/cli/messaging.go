@@ -97,6 +97,12 @@ func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comm
 
 			var mentions []band.Mention
 			for _, h := range handles {
+				// The sender's own handle can never be in their peers list — you
+				// aren't your own peer. Leave the @text in content for readability,
+				// but skip it for the mentions array.
+				if h == st.Handle {
+					continue
+				}
 				peer := findPeerByHandle(peers, h)
 				if peer == nil {
 					return fmt.Errorf("@%s not found in your peer network (have you joined a chat with them, or are they outside the visible peer page?)", h)
@@ -106,6 +112,9 @@ func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comm
 					Name:   shortNameFromHandle(h),
 					Handle: h,
 				})
+			}
+			if len(mentions) == 0 {
+				return fmt.Errorf("message had only your own handle (@%s) mentioned; Band requires at least one resolvable @-mention to someone else", st.Handle)
 			}
 			// Text is preserved as the user wrote it. Band's resolver matches
 			// `@<handle>` (globally unique) before falling back to `@<name>`,

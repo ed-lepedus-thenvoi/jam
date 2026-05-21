@@ -149,6 +149,37 @@ func TestSend_ErrorsWithoutMention(t *testing.T) {
 	}
 }
 
+func TestSend_SkipsSenderOwnHandle(t *testing.T) {
+	h := newMsgHarness(t)
+	// Harness session state has Handle = "alice/self". Mentioning self in
+	// content text shouldn't error — Band rejects messages without ANY
+	// mention, but the sender's own handle can't be in their peers list
+	// (you're never your own peer), so the resolver must skip it.
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"send", "chat-1", "@alice/claude-self @alice/bob ping yourself"}, nil, &stdout, &stderr, h.env())
+	if code != 0 {
+		t.Fatalf("exit %d\nstderr: %s", code, stderr.String())
+	}
+	body := h.sentMessageBody(t)
+	msg := body["message"].(map[string]any)
+	mentions := msg["mentions"].([]any)
+	if len(mentions) != 1 {
+		t.Fatalf("expected 1 mention (sender skipped), got %d: %v", len(mentions), mentions)
+	}
+	if mentions[0].(map[string]any)["id"] != "peer-bob" {
+		t.Errorf("expected only bob in mentions, got %v", mentions[0])
+	}
+}
+
+func TestSend_ErrorsWhenOnlySenderMentioned(t *testing.T) {
+	h := newMsgHarness(t)
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"send", "chat-1", "@alice/claude-self talking to myself"}, nil, &stdout, &stderr, h.env())
+	if code == 0 {
+		t.Fatalf("expected nonzero exit when only mention is sender's own handle")
+	}
+}
+
 func TestSend_ErrorsWhenHandleNotInPeers(t *testing.T) {
 	h := newMsgHarness(t)
 	var stdout, stderr bytes.Buffer

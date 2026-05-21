@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -53,6 +55,7 @@ func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfil
 				if err := ensureTeamInbox(env.HomeDir, teamName); err != nil {
 					return fmt.Errorf("preparing team inbox dir: %w", err)
 				}
+				warnIfTeamNotMember(stderr, env.HomeDir, teamName)
 			}
 			st, _, err := ensureDaemonRunning(env, getProfile(), agentName, teamName, teammateName)
 			if err != nil {
@@ -71,4 +74,22 @@ func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfil
 func ensureTeamInbox(homeDir, teamName string) error {
 	dir := filepath.Join(homeDir, ".claude", "teams", teamName, "inboxes")
 	return os.MkdirAll(dir, 0o700)
+}
+
+// warnIfTeamNotMember surfaces a sharp footgun: jam can create the inbox dir
+// and the bridge will write notifications into it, but Claude Code only
+// injects <teammate-message> blocks for teams the CC session is actually a
+// member of. Membership is established when a CC session runs TeamCreate,
+// which writes <team>/config.json. Absence of that file means no CC session
+// has joined; notifications will silently go unread.
+func warnIfTeamNotMember(stderr io.Writer, homeDir, teamName string) {
+	configPath := filepath.Join(homeDir, ".claude", "teams", teamName, "config.json")
+	if _, err := os.Stat(configPath); !errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	fmt.Fprintf(stderr, "warning: team %q has no config.json in ~/.claude/teams/<team>/.\n", teamName)
+	fmt.Fprintln(stderr, "  No Claude Code session has joined this team via TeamCreate, so the bridge will")
+	fmt.Fprintln(stderr, "  write inbox notifications that won't appear as <teammate-message> blocks in any")
+	fmt.Fprintln(stderr, "  CC session. To fix: from a CC session, run TeamCreate(team_name=\""+teamName+"\")")
+	fmt.Fprintln(stderr, "  BEFORE jam onboard. Then re-run jam onboard --team "+teamName+".")
 }
