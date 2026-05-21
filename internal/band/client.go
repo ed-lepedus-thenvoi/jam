@@ -163,6 +163,51 @@ func (c *Client) MarkProcessed(chatID, msgID string) error {
 	return c.do("POST", "/api/v1/agent/chats/"+chatID+"/messages/"+msgID+"/processed", bytes.NewReader([]byte("{}")), nil)
 }
 
+type ChatRoom struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	TaskID     string `json:"task_id"`
+	InsertedAt string `json:"inserted_at"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+// CreateChat creates a new chat room owned by the calling agent. Band auto-
+// generates the title from the first message, so this takes no parameters.
+func (c *Client) CreateChat() (*ChatRoom, error) {
+	var env struct {
+		Data ChatRoom `json:"data"`
+	}
+	if err := c.do("POST", "/api/v1/agent/chats", bytes.NewReader([]byte(`{"chat":{}}`)), &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// ListAgentChats returns chats the calling agent is in (first page, 100 max).
+func (c *Client) ListAgentChats() ([]ChatRoom, error) {
+	var env struct {
+		Data []ChatRoom `json:"data"`
+	}
+	if err := c.do("GET", "/api/v1/agent/chats?page_size=100", nil, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
+// AddParticipant adds a peer to a chat. role defaults to "member" if empty.
+func (c *Client) AddParticipant(chatID, participantID, role string) error {
+	if role == "" {
+		role = "member"
+	}
+	body, err := json.Marshal(map[string]any{
+		"participant": map[string]string{"participant_id": participantID, "role": role},
+	})
+	if err != nil {
+		return err
+	}
+	return c.do("POST", "/api/v1/agent/chats/"+chatID+"/participants", bytes.NewReader(body), nil)
+}
+
 // AgentMe queries /api/v1/agent/me using the supplied agent API key (not the
 // user key on this client). Used to discover the handle of a freshly-registered
 // agent without needing a second client.

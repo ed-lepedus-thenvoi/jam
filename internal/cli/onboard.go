@@ -22,6 +22,11 @@ Messaging:
   jam inbox                     List pending inbound
   jam send <chat_id> "@h text"  Send a fresh message (@-mentions resolved automatically)
 
+Chats:
+  jam chat new --with @h        Create a chat and add a participant in one go
+  jam chat list                 List chats you're in (full IDs for copy/paste)
+  jam chat add <chat_id> @h     Add a participant to an existing chat
+
 Lifecycle:
   jam daemon status             Show this bridge's status
   jam daemon stop               Tear down (kills the bridge, deregisters the agent)
