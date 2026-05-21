@@ -14,7 +14,7 @@ import (
 const defaultBaseURL = "https://app.band.ai"
 
 func newInitCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
-	var baseURL, userKey, sockpuppetDir string
+	var baseURL, userKey string
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Verify your Band user API key and save it to a profile config",
@@ -30,9 +30,8 @@ func newInitCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile f
 			}
 			profileName := getProfile()
 			if err := config.Save(env.HomeDir, profileName, &config.Config{
-				BaseURL:       baseURL,
-				UserAPIKey:    userKey,
-				SockpuppetDir: sockpuppetDir,
+				BaseURL:    baseURL,
+				UserAPIKey: userKey,
 			}); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
@@ -44,7 +43,6 @@ func newInitCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile f
 	}
 	cmd.Flags().StringVar(&baseURL, "base-url", defaultBaseURL, "Band API base URL")
 	cmd.Flags().StringVar(&userKey, "user-api-key", "", "Band user API key (band_u_...)")
-	cmd.Flags().StringVar(&sockpuppetDir, "sockpuppet-dir", "", "Path to the agent-sockpuppet Elixir project (required for `jam daemon`)")
 	_ = cmd.MarkFlagRequired("user-api-key")
 	return cmd
 }

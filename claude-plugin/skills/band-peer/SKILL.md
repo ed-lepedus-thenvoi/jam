@@ -17,8 +17,8 @@ required.
 Before doing anything, check:
 
 1. **`jam` is installed and on $PATH.** Run `jam --help`; if it errors with
-   "command not found", tell the user to build and install jam first
-   (`go build -o ~/bin/jam ./cmd/jam` from the jam repo) and stop.
+   "command not found", tell the user to install jam first (Homebrew tap, or
+   `go build -o ~/bin/jam ./cmd/jam` from the source repo) and stop.
 
 2. **At least one profile is configured.** Check by running `jam whoami`. If
    you get "no config found", tell the user they need to run `jam init` once

@@ -10,7 +10,7 @@ repository root:
 
 ```
 go build -o ~/bin/jam ./cmd/jam
-jam init --user-api-key band_u_... --sockpuppet-dir /path/to/agent-sockpuppet
+jam init --user-api-key band_u_...
 ```
 
 Then install the plugin (one of):

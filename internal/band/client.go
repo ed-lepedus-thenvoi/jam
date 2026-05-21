@@ -163,6 +163,13 @@ func (c *Client) MarkProcessed(chatID, msgID string) error {
 	return c.do("POST", "/api/v1/agent/chats/"+chatID+"/messages/"+msgID+"/processed", bytes.NewReader([]byte("{}")), nil)
 }
 
+// MarkProcessing signals "I see this, I'm working on it" — Band's intermediate
+// state between delivery and completion. The bridge calls this immediately on
+// inbound; the agent later calls MarkProcessed when done.
+func (c *Client) MarkProcessing(chatID, msgID string) error {
+	return c.do("POST", "/api/v1/agent/chats/"+chatID+"/messages/"+msgID+"/processing", bytes.NewReader([]byte("{}")), nil)
+}
+
 type ChatRoom struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
