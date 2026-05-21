@@ -90,3 +90,41 @@ func Remove(homeDir, profile, scope string) error {
 	}
 	return nil
 }
+
+// ListAll walks every profile under ~/.config/jam/sessions/<profile>/ and
+// returns parsed State for each .json file found. Missing root dir = empty list.
+// Files that fail to parse are skipped silently (callers can inspect the dir
+// directly if they need finer error reporting).
+func ListAll(homeDir string) ([]*State, error) {
+	root := filepath.Join(homeDir, ".config", "jam", "sessions")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []*State
+	for _, profileDir := range entries {
+		if !profileDir.IsDir() {
+			continue
+		}
+		profile := profileDir.Name()
+		files, err := os.ReadDir(filepath.Join(root, profile))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if f.IsDir() || filepath.Ext(f.Name()) != ".json" {
+				continue
+			}
+			scope := f.Name()[:len(f.Name())-len(".json")]
+			st, err := Load(homeDir, profile, scope)
+			if err != nil {
+				continue
+			}
+			out = append(out, st)
+		}
+	}
+	return out, nil
+}

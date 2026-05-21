@@ -15,6 +15,7 @@ func newAgentCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile 
 		Short: "Manage Band agents owned by you",
 	}
 	cmd.AddCommand(newAgentListCmd(stdout, env, getProfile))
+	cmd.AddCommand(newAgentPruneCmd(stdout, stderr, env))
 	return cmd
 }
 
