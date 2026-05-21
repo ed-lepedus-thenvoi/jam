@@ -9,21 +9,21 @@ import (
 	"github.com/thenvoi/jam/internal/band"
 )
 
-func newAgentCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {
+func newAgentCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "Manage Band agents owned by you",
 	}
-	cmd.AddCommand(newAgentListCmd(stdout, env))
+	cmd.AddCommand(newAgentListCmd(stdout, env, getProfile))
 	return cmd
 }
 
-func newAgentListCmd(stdout io.Writer, env Env) *cobra.Command {
+func newAgentListCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List Band agents you own",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfigOrHint(env.HomeDir)
+			cfg, err := loadConfigOrHint(env.HomeDir, getProfile())
 			if err != nil {
 				return err
 			}

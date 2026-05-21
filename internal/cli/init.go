@@ -11,13 +11,16 @@ import (
 	"github.com/thenvoi/jam/internal/config"
 )
 
-func newInitCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {
+const defaultBaseURL = "https://app.band.ai"
+
+func newInitCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	var baseURL, userKey, sockpuppetDir string
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Verify your Band user API key and save it to config",
+		Short: "Verify your Band user API key and save it to a profile config",
 		Long: "Verifies the provided user API key against /api/v1/me/profile and, on success, " +
-			"writes ~/.config/jam/config.json with mode 0600. Re-running overwrites the existing config.",
+			"writes ~/.config/jam/profiles/<profile>.json with mode 0600. The profile defaults to " +
+			"'default' and can be selected with --profile or JAM_PROFILE. Re-running overwrites.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseURL = strings.TrimRight(baseURL, "/")
 			c := band.New(baseURL, userKey)
@@ -25,19 +28,21 @@ func newInitCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Comma
 			if err != nil {
 				return fmt.Errorf("verifying API key: %w", err)
 			}
-			if err := config.Save(env.HomeDir, &config.Config{
+			profileName := getProfile()
+			if err := config.Save(env.HomeDir, profileName, &config.Config{
 				BaseURL:       baseURL,
 				UserAPIKey:    userKey,
 				SockpuppetDir: sockpuppetDir,
 			}); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
-			fmt.Fprintf(stdout, "Authenticated as %s %s <%s>\nConfig saved to %s\n",
-				profile.FirstName, profile.LastName, profile.Email, config.Path(env.HomeDir))
+			fmt.Fprintf(stdout, "Authenticated as %s %s <%s>\nProfile '%s' saved to %s\n",
+				profile.FirstName, profile.LastName, profile.Email,
+				profileName, config.Path(env.HomeDir, profileName))
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&baseURL, "base-url", "https://platform.band.ai", "Band API base URL")
+	cmd.Flags().StringVar(&baseURL, "base-url", defaultBaseURL, "Band API base URL")
 	cmd.Flags().StringVar(&userKey, "user-api-key", "", "Band user API key (band_u_...)")
 	cmd.Flags().StringVar(&sockpuppetDir, "sockpuppet-dir", "", "Path to the agent-sockpuppet Elixir project (required for `jam daemon`)")
 	_ = cmd.MarkFlagRequired("user-api-key")

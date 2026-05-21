@@ -30,7 +30,7 @@ handle (ed.lepedus/...) and mark every inbound processed or Band stalls the
 queue.
 `
 
-func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {
+func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	var teamName, teammateName, agentName string
 	cmd := &cobra.Command{
 		Use:   "onboard",
@@ -48,7 +48,7 @@ func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Co
 					return fmt.Errorf("preparing team inbox dir: %w", err)
 				}
 			}
-			st, _, err := ensureDaemonRunning(env, agentName, teamName, teammateName)
+			st, _, err := ensureDaemonRunning(env, getProfile(), agentName, teamName, teammateName)
 			if err != nil {
 				return err
 			}

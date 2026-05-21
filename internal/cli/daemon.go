@@ -25,24 +25,24 @@ const connectedMarker = "[Socket] Connected as"
 
 const connectTimeout = 30 * time.Second
 
-func newDaemonCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {
+func newDaemonCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Manage the Band sockpuppet daemon for this working directory",
 	}
-	cmd.AddCommand(newDaemonStartCmd(stdout, stderr, env))
-	cmd.AddCommand(newDaemonStopCmd(stdout, stderr, env))
-	cmd.AddCommand(newDaemonStatusCmd(stdout, env))
+	cmd.AddCommand(newDaemonStartCmd(stdout, stderr, env, getProfile))
+	cmd.AddCommand(newDaemonStopCmd(stdout, stderr, env, getProfile))
+	cmd.AddCommand(newDaemonStatusCmd(stdout, env, getProfile))
 	return cmd
 }
 
-func newDaemonStartCmd(stdout, stderr io.Writer, env Env) *cobra.Command {
+func newDaemonStartCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	var name, teamName, teammateName string
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Provision an agent and start the sockpuppet (idempotent per cwd)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDaemonStart(stdout, env, name, teamName, teammateName)
+			return runDaemonStart(stdout, env, getProfile(), name, teamName, teammateName)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Override the auto-derived agent name")
@@ -51,8 +51,8 @@ func newDaemonStartCmd(stdout, stderr io.Writer, env Env) *cobra.Command {
 	return cmd
 }
 
-func runDaemonStart(stdout io.Writer, env Env, nameOverride, teamName, teammateName string) error {
-	st, already, err := ensureDaemonRunning(env, nameOverride, teamName, teammateName)
+func runDaemonStart(stdout io.Writer, env Env, profile, nameOverride, teamName, teammateName string) error {
+	st, already, err := ensureDaemonRunning(env, profile, nameOverride, teamName, teammateName)
 	if err != nil {
 		return err
 	}
@@ -67,8 +67,8 @@ func runDaemonStart(stdout io.Writer, env Env, nameOverride, teamName, teammateN
 // ensureDaemonRunning is the idempotent core shared by `daemon start` and
 // `onboard`. Returns the live session state and a bool indicating whether the
 // daemon was already running (true) or was just started (false).
-func ensureDaemonRunning(env Env, nameOverride, teamName, teammateName string) (*session.State, bool, error) {
-	cfg, err := loadConfigOrHint(env.HomeDir)
+func ensureDaemonRunning(env Env, profile, nameOverride, teamName, teammateName string) (*session.State, bool, error) {
+	cfg, err := loadConfigOrHint(env.HomeDir, profile)
 	if err != nil {
 		return nil, false, err
 	}
@@ -78,11 +78,11 @@ func ensureDaemonRunning(env Env, nameOverride, teamName, teammateName string) (
 
 	scope := session.Scope(env.Cwd)
 
-	if st, err := session.Load(env.HomeDir, scope); err == nil {
+	if st, err := session.Load(env.HomeDir, profile, scope); err == nil {
 		if processAlive(st.PID) {
 			return st, true, nil
 		}
-		_ = session.Remove(env.HomeDir, scope)
+		_ = session.Remove(env.HomeDir, profile, scope)
 	}
 
 	agentName := nameOverride
@@ -106,7 +106,7 @@ func ensureDaemonRunning(env Env, nameOverride, teamName, teammateName string) (
 		return nil, false, reason
 	}
 
-	logPath := filepath.Join(env.HomeDir, ".config", "jam", "sessions", scope+".log")
+	logPath := session.LogPath(env.HomeDir, profile, scope)
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
 		return rollback(fmt.Errorf("creating sessions dir: %w", err))
 	}
@@ -154,6 +154,7 @@ func ensureDaemonRunning(env Env, nameOverride, teamName, teammateName string) (
 
 	st := &session.State{
 		Scope:        scope,
+		Profile:      profile,
 		Cwd:          env.Cwd,
 		AgentID:      registered.Agent.ID,
 		AgentName:    registered.Agent.Name,
@@ -165,7 +166,7 @@ func ensureDaemonRunning(env Env, nameOverride, teamName, teammateName string) (
 		TeammateName: teammateName,
 		StartedAt:    time.Now().UTC(),
 	}
-	if err := session.Save(env.HomeDir, st); err != nil {
+	if err := session.Save(env.HomeDir, profile, st); err != nil {
 		_ = syscall.Kill(pid, syscall.SIGTERM)
 		return rollback(fmt.Errorf("saving session: %w", err))
 	}
@@ -173,17 +174,18 @@ func ensureDaemonRunning(env Env, nameOverride, teamName, teammateName string) (
 	return st, false, nil
 }
 
-func newDaemonStopCmd(stdout, stderr io.Writer, env Env) *cobra.Command {
+func newDaemonStopCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the sockpuppet and deregister the per-cwd agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfigOrHint(env.HomeDir)
+			profile := getProfile()
+			cfg, err := loadConfigOrHint(env.HomeDir, profile)
 			if err != nil {
 				return err
 			}
 			scope := session.Scope(env.Cwd)
-			st, err := session.Load(env.HomeDir, scope)
+			st, err := session.Load(env.HomeDir, profile, scope)
 			if err != nil {
 				if errors.Is(err, session.ErrNotFound) {
 					fmt.Fprintln(stdout, "Not running")
@@ -208,7 +210,7 @@ func newDaemonStopCmd(stdout, stderr io.Writer, env Env) *cobra.Command {
 			if err := band.New(cfg.BaseURL, cfg.UserAPIKey).DeleteAgent(st.AgentID); err != nil {
 				fmt.Fprintf(stderr, "warning: failed to delete agent %s: %v\n", st.AgentID, err)
 			}
-			if err := session.Remove(env.HomeDir, scope); err != nil {
+			if err := session.Remove(env.HomeDir, profile, scope); err != nil {
 				return fmt.Errorf("removing session state: %w", err)
 			}
 			fmt.Fprintf(stdout, "Stopped %s (pid %d)\n", st.Handle, st.PID)
@@ -217,13 +219,14 @@ func newDaemonStopCmd(stdout, stderr io.Writer, env Env) *cobra.Command {
 	}
 }
 
-func newDaemonStatusCmd(stdout io.Writer, env Env) *cobra.Command {
+func newDaemonStatusCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show the sockpuppet status for this working directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			profile := getProfile()
 			scope := session.Scope(env.Cwd)
-			st, err := session.Load(env.HomeDir, scope)
+			st, err := session.Load(env.HomeDir, profile, scope)
 			if err != nil {
 				if errors.Is(err, session.ErrNotFound) {
 					fmt.Fprintln(stdout, "Not running")

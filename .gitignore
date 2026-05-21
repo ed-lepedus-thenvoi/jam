@@ -3,6 +3,7 @@
 
 # Go build artifacts
 /jam
+/main
 *.test
 *.out
 

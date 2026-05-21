@@ -8,20 +8,31 @@ import (
 	"path/filepath"
 )
 
+// DefaultProfile is the profile name used when none is supplied.
+const DefaultProfile = "default"
+
 type Config struct {
 	BaseURL       string `json:"base_url"`
 	UserAPIKey    string `json:"user_api_key"`
 	SockpuppetDir string `json:"sockpuppet_dir,omitempty"`
 }
 
-// Path returns the canonical config file location for the given home dir.
-func Path(homeDir string) string {
-	return filepath.Join(homeDir, ".config", "jam", "config.json")
+// resolveProfile maps "" to DefaultProfile so callers can pass empty-string
+// meaning "no preference."
+func resolveProfile(profile string) string {
+	if profile == "" {
+		return DefaultProfile
+	}
+	return profile
 }
 
-// Load reads and parses the config file. Returns ErrNotFound if it doesn't exist.
-func Load(homeDir string) (*Config, error) {
-	data, err := os.ReadFile(Path(homeDir))
+// Path returns the config file location for a given home dir + profile.
+func Path(homeDir, profile string) string {
+	return filepath.Join(homeDir, ".config", "jam", "profiles", resolveProfile(profile)+".json")
+}
+
+func Load(homeDir, profile string) (*Config, error) {
+	data, err := os.ReadFile(Path(homeDir, profile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
@@ -35,9 +46,8 @@ func Load(homeDir string) (*Config, error) {
 	return &c, nil
 }
 
-// Save writes the config atomically with 0600 perms, creating the directory if needed.
-func Save(homeDir string, c *Config) error {
-	dir := filepath.Join(homeDir, ".config", "jam")
+func Save(homeDir, profile string, c *Config) error {
+	dir := filepath.Join(homeDir, ".config", "jam", "profiles")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -45,7 +55,7 @@ func Save(homeDir string, c *Config) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, "config.*.tmp")
+	tmp, err := os.CreateTemp(dir, ".config.*.tmp")
 	if err != nil {
 		return err
 	}
@@ -62,7 +72,7 @@ func Save(homeDir string, c *Config) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, Path(homeDir))
+	return os.Rename(tmpName, Path(homeDir, profile))
 }
 
 var ErrNotFound = errors.New("config not found")

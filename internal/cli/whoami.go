@@ -9,12 +9,12 @@ import (
 	"github.com/thenvoi/jam/internal/band"
 )
 
-func newWhoamiCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {
+func newWhoamiCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "whoami",
 		Short: "Show the user profile for the configured API key",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfigOrHint(env.HomeDir)
+			cfg, err := loadConfigOrHint(env.HomeDir, getProfile())
 			if err != nil {
 				return err
 			}
@@ -23,8 +23,8 @@ func newWhoamiCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Com
 			if err != nil {
 				return fmt.Errorf("fetching profile: %w", err)
 			}
-			fmt.Fprintf(stdout, "%s %s <%s>\nrole: %s\n",
-				profile.FirstName, profile.LastName, profile.Email, profile.Role)
+			fmt.Fprintf(stdout, "%s %s <%s>\nrole: %s\nprofile: %s\n",
+				profile.FirstName, profile.LastName, profile.Email, profile.Role, getProfile())
 			return nil
 		},
 	}

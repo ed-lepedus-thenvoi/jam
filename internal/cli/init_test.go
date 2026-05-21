@@ -51,7 +51,7 @@ func TestInit_WritesConfigAndReportsSuccess(t *testing.T) {
 		t.Errorf("expected stdout to mention authenticated user, got: %s", stdout.String())
 	}
 
-	cfgPath := filepath.Join(home, ".config", "jam", "config.json")
+	cfgPath := filepath.Join(home, ".config", "jam", "profiles", "default.json")
 	info, err := os.Stat(cfgPath)
 	if err != nil {
 		t.Fatalf("config file not written: %v", err)
@@ -88,7 +88,7 @@ func TestInit_RejectsBadKey(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected nonzero exit on bad key\nstdout: %s", stdout.String())
 	}
-	if _, err := os.Stat(filepath.Join(home, ".config", "jam", "config.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".config", "jam", "profiles", "default.json")); !os.IsNotExist(err) {
 		t.Errorf("config file should NOT exist after failed auth, got err=%v", err)
 	}
 	if strings.TrimSpace(stderr.String()) == "" {
@@ -102,7 +102,7 @@ func TestInit_IsIdempotentlyOverwrites(t *testing.T) {
 		`{"data":{"id":"u-1","email":"ed@example.com","first_name":"Ed","last_name":"Lepedus","role":"user","listed_in_directory":false}}`,
 		200,
 	)
-	cfgPath := filepath.Join(home, ".config", "jam", "config.json")
+	cfgPath := filepath.Join(home, ".config", "jam", "profiles", "default.json")
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o700); err != nil {
 		t.Fatal(err)
 	}

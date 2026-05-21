@@ -9,13 +9,20 @@ import (
 )
 
 func writeConfig(t *testing.T, home, baseURL, apiKey string) {
+	writeProfileConfig(t, home, "", baseURL, apiKey)
+}
+
+func writeProfileConfig(t *testing.T, home, profile, baseURL, apiKey string) {
 	t.Helper()
-	dir := filepath.Join(home, ".config", "jam")
+	if profile == "" {
+		profile = "default"
+	}
+	dir := filepath.Join(home, ".config", "jam", "profiles")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"base_url":"` + baseURL + `","user_api_key":"` + apiKey + `"}`
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, profile+".json"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

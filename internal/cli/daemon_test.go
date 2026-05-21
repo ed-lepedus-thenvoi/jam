@@ -120,7 +120,7 @@ func TestDaemonStart_ColdStartProvisionsAndSpawns(t *testing.T) {
 	}
 
 	scope := session.Scope(h.cwd)
-	st, err := session.Load(h.home, scope)
+	st, err := session.Load(h.home, "", scope)
 	if err != nil {
 		t.Fatalf("session state not saved: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestDaemonStop_KillsDeletesAndCleans(t *testing.T) {
 		t.Fatalf("start failed: %s", s1err.String())
 	}
 	scope := session.Scope(h.cwd)
-	st, _ := session.Load(h.home, scope)
+	st, _ := session.Load(h.home, "", scope)
 	pidBefore := st.PID
 
 	var stdout, stderr bytes.Buffer
@@ -190,7 +190,7 @@ func TestDaemonStop_KillsDeletesAndCleans(t *testing.T) {
 	if h.deleteCalls.Load() != 1 {
 		t.Errorf("expected 1 DELETE call, got %d", h.deleteCalls.Load())
 	}
-	if _, err := session.Load(h.home, scope); err == nil {
+	if _, err := session.Load(h.home, "", scope); err == nil {
 		t.Errorf("expected session state removed after stop")
 	}
 	// Give the OS a moment to reap.
