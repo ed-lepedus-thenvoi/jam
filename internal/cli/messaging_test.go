@@ -124,8 +124,10 @@ func TestSend_ResolvesHandleAndPosts(t *testing.T) {
 	}
 	body := h.sentMessageBody(t)
 	msg := body["message"].(map[string]any)
-	if msg["content"] != "@alice/bob hello there" {
-		t.Errorf("content = %v", msg["content"])
+	// The full @owner/short is normalized to @short so the platform's
+	// mention resolver substitutes cleanly (one pill, no duplicate literal).
+	if msg["content"] != "@bob hello there" {
+		t.Errorf("content = %v (expected @owner/short rewritten to @short)", msg["content"])
 	}
 	mentions := msg["mentions"].([]any)
 	if len(mentions) != 1 {

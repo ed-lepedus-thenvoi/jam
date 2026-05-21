@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -62,6 +63,20 @@ func findPeerByHandle(peers []band.Peer, handle string) *band.Peer {
 	return nil
 }
 
+// normalizeMentionsInText rewrites each @owner/short occurrence to @short so
+// the platform's mention resolver matches mention.name and emits a single pill
+// rather than pill + literal text. Handles are replaced longest-first to avoid
+// accidentally consuming a prefix of a longer handle.
+func normalizeMentionsInText(text string, handles []string) string {
+	sorted := make([]string, len(handles))
+	copy(sorted, handles)
+	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
+	for _, h := range sorted {
+		text = strings.ReplaceAll(text, "@"+h, "@"+shortNameFromHandle(h))
+	}
+	return text
+}
+
 func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "send <chat_id> <message>",
@@ -102,6 +117,11 @@ func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comm
 				}
 				mentions = append(mentions, band.Mention{ID: peer.ID, Name: shortNameFromHandle(h)})
 			}
+			// Normalize @owner/short → @short in the text so Band's mention
+			// resolver substitutes cleanly (one pill) instead of prepending the
+			// resolved pill alongside the literal handle. Longest-first replace
+			// avoids accidentally consuming a prefix of another handle.
+			content = normalizeMentionsInText(content, handles)
 
 			msgID, err := client.SendChatMessage(chatID, content, mentions)
 			if err != nil {
