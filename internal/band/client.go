@@ -87,14 +87,75 @@ func (c *Client) RegisterAgent(name, description string) (*RegisteredAgent, erro
 	return &RegisteredAgent{Agent: env.Data.Agent, APIKey: env.Data.Credentials.APIKey}, nil
 }
 
-func (c *Client) DeleteAgent(id string) error {
-	return c.do("DELETE", "/api/v1/me/agents/"+id, nil, nil)
+// DeleteAgent removes a user-owned agent. force=true tells Band to delete
+// agents that have execution history (otherwise 422). Ephemeral session
+// agents managed by `jam daemon` always need force=true since they will
+// have sent or received messages by the time stop runs.
+func (c *Client) DeleteAgent(id string, force bool) error {
+	path := "/api/v1/me/agents/" + id
+	if force {
+		path += "?force=true"
+	}
+	return c.do("DELETE", path, nil, nil)
 }
 
 type Identity struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Handle string `json:"handle"`
+}
+
+type Peer struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Handle string `json:"handle"`
+	Type   string `json:"type"`
+}
+
+type Mention struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ListPeers returns the agent's peer network (other agents and users it can
+// recruit/message). The client must be constructed with an *agent* API key.
+func (c *Client) ListPeers() ([]Peer, error) {
+	var env struct {
+		Data []Peer `json:"data"`
+	}
+	if err := c.do("GET", "/api/v1/agent/peers?page_size=100", nil, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
+// SendChatMessage posts a text message into a chat. Band requires at least
+// one resolved @-mention in the mentions array. Returns the new message ID.
+func (c *Client) SendChatMessage(chatID, content string, mentions []Mention) (string, error) {
+	body, err := json.Marshal(map[string]any{
+		"message": map[string]any{
+			"content":  content,
+			"mentions": mentions,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	var env struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := c.do("POST", "/api/v1/agent/chats/"+chatID+"/messages", bytes.NewReader(body), &env); err != nil {
+		return "", err
+	}
+	return env.Data.ID, nil
+}
+
+// MarkProcessed marks an inbound message as processed. Must be called for every
+// inbound (even ones not replied to) or Band stalls the per-(agent,chat) cursor.
+func (c *Client) MarkProcessed(chatID, msgID string) error {
+	return c.do("POST", "/api/v1/agent/chats/"+chatID+"/messages/"+msgID+"/processed", bytes.NewReader([]byte("{}")), nil)
 }
 
 // AgentMe queries /api/v1/agent/me using the supplied agent API key (not the

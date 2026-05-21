@@ -38,5 +38,9 @@ func newRootCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Comma
 	cmd.AddCommand(newAgentCmd(stdin, stdout, stderr, env, getProfile))
 	cmd.AddCommand(newDaemonCmd(stdin, stdout, stderr, env, getProfile))
 	cmd.AddCommand(newOnboardCmd(stdin, stdout, stderr, env, getProfile))
+	cmd.AddCommand(newSendCmd(stdout, env, getProfile))
+	cmd.AddCommand(newReplyCmd(stdout, stderr, env, getProfile))
+	cmd.AddCommand(newInboxCmd(stdout, env, getProfile))
+	cmd.AddCommand(newAckCmd(stdout, env, getProfile))
 	return cmd
 }

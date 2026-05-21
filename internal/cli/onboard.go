@@ -13,21 +13,22 @@ const orientationTemplate = `You're online as %s (pid %d).
 
 Inbound: messages directed at @%s arrive automatically as <teammate-message>
 blocks in your next turn — the sockpuppet writes them to your team inbox, so
-no polling is required.
+no polling is required. Each notification's text tells you the exact jam
+command to reply or acknowledge.
+
+Messaging:
+  jam reply <msg_id> "text"     Reply to an inbound (auto-mentions sender, auto-acks)
+  jam ack <msg_id>              Mark an inbound processed without replying
+  jam inbox                     List pending inbound
+  jam send <chat_id> "@h text"  Send a fresh message (@-mentions resolved automatically)
 
 Lifecycle:
-  jam daemon status      Show this bridge's status
-  jam daemon stop        Tear down (kills the bridge, deregisters the agent)
-  jam agent list         List your other Band agents
-  jam onboard            Idempotent: run this again any time to re-print this
+  jam daemon status             Show this bridge's status
+  jam daemon stop               Tear down (kills the bridge, deregisters the agent)
+  jam agent list                List your other Band agents
+  jam onboard                   Idempotent: run this any time to re-print this
 
 Log: %s
-
-Messaging commands (jam send / reply / inbox / ack) ship in the next slice.
-Until then, outbound is curl against /api/v1/agent/chats/<chat_id>/messages
-with your agent API key. Remember to @-mention the recipient using their full
-handle (ed.lepedus/...) and mark every inbound processed or Band stalls the
-queue.
 `
 
 func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {

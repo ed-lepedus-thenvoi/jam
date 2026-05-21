@@ -100,7 +100,7 @@ func ensureDaemonRunning(env Env, profile, nameOverride, teamName, teammateName 
 	// From here on, failures must roll back the agent registration so we don't
 	// orphan it on the platform.
 	rollback := func(reason error) (*session.State, bool, error) {
-		if delErr := bandClient.DeleteAgent(registered.Agent.ID); delErr != nil {
+		if delErr := bandClient.DeleteAgent(registered.Agent.ID, true); delErr != nil {
 			return nil, false, fmt.Errorf("%w (additionally, rollback delete failed: %v)", reason, delErr)
 		}
 		return nil, false, reason
@@ -207,7 +207,7 @@ func newDaemonStopCmd(stdout, stderr io.Writer, env Env, getProfile func() strin
 					_ = syscall.Kill(-st.PID, syscall.SIGKILL)
 				}
 			}
-			if err := band.New(cfg.BaseURL, cfg.UserAPIKey).DeleteAgent(st.AgentID); err != nil {
+			if err := band.New(cfg.BaseURL, cfg.UserAPIKey).DeleteAgent(st.AgentID, true); err != nil {
 				fmt.Fprintf(stderr, "warning: failed to delete agent %s: %v\n", st.AgentID, err)
 			}
 			if err := session.Remove(env.HomeDir, profile, scope); err != nil {
