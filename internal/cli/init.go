@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/band"
-	"github.com/thenvoi/jam/internal/config"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/config"
 )
 
 const defaultBaseURL = "https://app.band.ai"

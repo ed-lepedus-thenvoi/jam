@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/band"
-	"github.com/thenvoi/jam/internal/config"
-	"github.com/thenvoi/jam/internal/session"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/config"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
 )
 
 func newAgentPruneCmd(stdout, stderr io.Writer, env Env) *cobra.Command {

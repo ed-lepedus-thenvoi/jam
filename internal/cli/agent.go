@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
 )
 
 func newAgentCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {

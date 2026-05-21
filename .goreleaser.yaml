@@ -1,0 +1,71 @@
+version: 2
+
+project_name: jam
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: jam
+    main: ./cmd/jam
+    binary: jam
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: jam
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+# GoReleaser writes the formula straight into the tap repo. Requires a PAT
+# with `repo` scope in the jam repo's secrets as HOMEBREW_TAP_GITHUB_TOKEN
+# (GITHUB_TOKEN is scoped to the running repo only and can't write the tap).
+brews:
+  - name: jam
+    homepage: "https://github.com/ed-lepedus-thenvoi/jam"
+    description: "Coordinate Claude Code sessions with remote agents and humans on the Band platform"
+    license: "MIT"
+    repository:
+      owner: ed-lepedus-thenvoi
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    install: |
+      bin.install "jam"
+    test: |
+      assert_match "Coordinate Claude Code sessions", shell_output("#{bin}/jam --help")
+
+release:
+  github:
+    owner: ed-lepedus-thenvoi
+    name: jam
+  draft: false
+  prerelease: auto

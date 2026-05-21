@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/thenvoi/jam/internal/inbox"
-	"github.com/thenvoi/jam/internal/session"
+	"github.com/ed-lepedus-thenvoi/jam/internal/inbox"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
 )
 
 // msgHarness wires a mock Band server (with /agent/peers + chat send/processed

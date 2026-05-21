@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/thenvoi/jam/internal/cli"
-	"github.com/thenvoi/jam/internal/sockpuppet"
+	"github.com/ed-lepedus-thenvoi/jam/internal/cli"
+	"github.com/ed-lepedus-thenvoi/jam/internal/sockpuppet"
 )
 
 func main() {

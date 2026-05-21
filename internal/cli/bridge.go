@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/bridge"
+	"github.com/ed-lepedus-thenvoi/jam/internal/bridge"
 )
 
 // newInternalBridgeCmd is the in-process replacement for the Elixir sockpuppet

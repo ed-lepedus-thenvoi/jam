@@ -3,7 +3,7 @@ package cli
 import (
 	"io"
 
-	"github.com/thenvoi/jam/internal/sockpuppet"
+	"github.com/ed-lepedus-thenvoi/jam/internal/sockpuppet"
 )
 
 // Env carries process-level inputs tests need to override: home dir, cwd,

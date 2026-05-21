@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/thenvoi/jam/internal/band"
-	"github.com/thenvoi/jam/internal/inbox"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/inbox"
 )
 
 func TestHandleIncoming_PostsProcessingAndWritesInbox(t *testing.T) {

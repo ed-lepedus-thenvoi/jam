@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/thenvoi/jam/internal/session"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
 )
 
 type chatHarness struct {

@@ -14,9 +14,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/band"
-	"github.com/thenvoi/jam/internal/session"
-	"github.com/thenvoi/jam/internal/sockpuppet"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
+	"github.com/ed-lepedus-thenvoi/jam/internal/sockpuppet"
 )
 
 // connectedMarker is the substring we wait for in the sockpuppet log to know

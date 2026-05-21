@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/config"
+	"github.com/ed-lepedus-thenvoi/jam/internal/config"
 )
 
 func newRootCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {

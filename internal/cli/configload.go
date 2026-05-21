@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/thenvoi/jam/internal/config"
+	"github.com/ed-lepedus-thenvoi/jam/internal/config"
 )
 
 // loadConfigOrHint returns the parsed config for the given profile, or a

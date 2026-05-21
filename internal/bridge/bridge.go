@@ -20,7 +20,7 @@ import (
 
 	"github.com/nshafer/phx"
 
-	"github.com/thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
 )
 
 // Config carries everything the bridge needs to identify itself, talk to Band,

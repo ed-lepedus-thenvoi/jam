@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thenvoi/jam/internal/session"
-	"github.com/thenvoi/jam/internal/sockpuppet"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
+	"github.com/ed-lepedus-thenvoi/jam/internal/sockpuppet"
 )
 
 // daemonHarness wires up a mock Band server, a stub sockpuppet script, and

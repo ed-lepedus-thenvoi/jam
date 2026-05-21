@@ -9,9 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thenvoi/jam/internal/band"
-	"github.com/thenvoi/jam/internal/inbox"
-	"github.com/thenvoi/jam/internal/session"
+	"github.com/ed-lepedus-thenvoi/jam/internal/band"
+	"github.com/ed-lepedus-thenvoi/jam/internal/inbox"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
 )
 
 // handleRegex matches @<owner>/<name> in message text. owner and name are
