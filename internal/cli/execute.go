@@ -7,12 +7,14 @@ import (
 )
 
 // Env carries process-level inputs tests need to override: home dir, cwd,
-// env-var lookup, and the sockpuppet spawner factory.
+// env-var lookup, the sockpuppet spawner factory, and the binary's version
+// string (injected at build time via goreleaser ldflags).
 type Env struct {
 	HomeDir         string
 	Cwd             string
 	Getenv          func(string) string
 	SpawnSockpuppet sockpuppet.Spawner
+	Version         string
 }
 
 // Execute is the single entrypoint shared by main() and tests.

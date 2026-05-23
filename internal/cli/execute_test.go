@@ -18,3 +18,27 @@ func TestExecute_HelpExitsZero(t *testing.T) {
 		t.Fatalf("expected non-empty help output, got: %q", stdout.String())
 	}
 }
+
+func TestExecute_VersionFlagPrintsVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"--version"}, nil, &stdout, &stderr,
+		Env{Version: "0.1.5-test (commit abc1234, built today)"})
+	if code != 0 {
+		t.Fatalf("--version exit %d\nstderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "0.1.5-test") {
+		t.Errorf("expected stdout to include the version, got: %s", stdout.String())
+	}
+}
+
+func TestExecute_VersionSubcommandPrintsVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"version"}, nil, &stdout, &stderr,
+		Env{Version: "0.1.5-test (commit abc1234, built today)"})
+	if code != 0 {
+		t.Fatalf("version subcommand exit %d\nstderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "0.1.5-test") {
+		t.Errorf("expected stdout to include the version, got: %s", stdout.String())
+	}
+}
