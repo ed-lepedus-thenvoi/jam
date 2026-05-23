@@ -9,13 +9,22 @@ Single static binary. The WebSocket bridge runs in-process via `jam daemon`.
 
 ## Install
 
-Until a Homebrew tap ships, install from source:
+Via Homebrew (macOS + Linux):
 
 ```
-go install github.com/thenvoi/jam/cmd/jam@latest
+brew tap ed-lepedus-thenvoi/tap
+brew install jam
+```
+
+Or from source (any platform with Go ≥ 1.23):
+
+```
+go install github.com/ed-lepedus-thenvoi/jam/cmd/jam@latest
 # or, from a checkout:
 go build -o ~/bin/jam ./cmd/jam
 ```
+
+Verify with `jam --version`.
 
 One-time setup per machine:
 
