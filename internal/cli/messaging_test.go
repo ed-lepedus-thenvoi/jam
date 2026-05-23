@@ -265,6 +265,36 @@ func TestSend_SkipsUnresolvableButProceedsWithRest(t *testing.T) {
 	}
 }
 
+func TestExtractHandles_SkipsMidWordAtSign(t *testing.T) {
+	// Package-coordinate syntax (`band-peer@jam-marketplace`), email-style
+	// (`me@example.com`), and similar mid-word `@` patterns must not be
+	// parsed as mentions. The @ has to be at start-of-string or preceded by
+	// a non-handle-like character.
+	cases := map[string][]string{
+		"band-peer@jam-marketplace":          nil,
+		"email me@example.com":               nil,
+		"deps include @alice/bob":            {"alice/bob"},
+		"@foo at start":                      {"foo"},
+		"see (@bar) parenthesized":           {"bar"},
+		`quote "@baz" please`:                {"baz"},
+		"newline\n@boundary line-start":      {"boundary"},
+		"adjacent text@nope but valid @yep":  {"yep"},
+		"package band-peer@jam-marketplace + real @alice/bob mention": {"alice/bob"},
+	}
+	for in, want := range cases {
+		got := extractHandles(in)
+		if len(got) != len(want) {
+			t.Errorf("extractHandles(%q) = %v; want %v", in, got, want)
+			continue
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("extractHandles(%q)[%d] = %q; want %q", in, i, got[i], want[i])
+			}
+		}
+	}
+}
+
 func TestExtractHandles_RejectsLeadingPunctuation(t *testing.T) {
 	// Prose patterns that should NOT be picked up as mentions: `@-mention`
 	// (leading hyphen), `@_init` (leading underscore), `@.foo` (leading dot).

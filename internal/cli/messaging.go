@@ -40,18 +40,37 @@ func loadSession(env Env, profile string) (*session.State, error) {
 }
 
 // extractHandles returns each unique full handle (owner/name) referenced in
-// text via @-mention syntax. Order-preserving and deduped.
+// text via @-mention syntax. Order-preserving and deduped. Matches whose `@`
+// is preceded by a handle-like char (alphanumeric, `_`, `.`, `-`) are skipped
+// as mid-word — `band-peer@jam-marketplace` (Claude Code plugin coordinate
+// syntax) and similar package-style strings shouldn't be parsed as mentions.
 func extractHandles(text string) []string {
-	matches := handleRegex.FindAllStringSubmatch(text, -1)
+	matches := handleRegex.FindAllStringSubmatchIndex(text, -1)
 	seen := map[string]bool{}
 	var out []string
 	for _, m := range matches {
-		if !seen[m[1]] {
-			seen[m[1]] = true
-			out = append(out, m[1])
+		atPos := m[0] // index of `@`
+		if atPos > 0 && isHandleLikeByte(text[atPos-1]) {
+			continue
+		}
+		captured := text[m[2]:m[3]]
+		if !seen[captured] {
+			seen[captured] = true
+			out = append(out, captured)
 		}
 	}
 	return out
+}
+
+// isHandleLikeByte reports whether a byte could appear inside a handle.
+// Used to detect when `@` is mid-word (preceded by such a byte), in which
+// case it's a package/email-style separator rather than a mention sigil.
+func isHandleLikeByte(b byte) bool {
+	switch {
+	case b >= 'A' && b <= 'Z', b >= 'a' && b <= 'z', b >= '0' && b <= '9':
+		return true
+	}
+	return b == '_' || b == '.' || b == '-'
 }
 
 func shortNameFromHandle(handle string) string {
