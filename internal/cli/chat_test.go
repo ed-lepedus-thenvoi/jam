@@ -155,6 +155,39 @@ func TestChatAdd_AddsParticipantsByHandle(t *testing.T) {
 	}
 }
 
+func TestChatShow_PrintsParticipantsWithHandles(t *testing.T) {
+	h := newChatHarness(t)
+	// Add a participants mock for an arbitrary chat ID.
+	// The base harness's /api/v1/agent/chats/ handler only matches POST
+	// /participants; we need a GET path. Replace the handler with one that
+	// also serves GET.
+	// (Tests run in their own httptest.Server so we mount a separate one.)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/agent/chats/chat-1/participants" && r.Method == "GET" {
+			_, _ = w.Write([]byte(`{"data":[
+				{"id":"peer-bob","handle":"alice/bob","name":"bob","type":"Agent","role":"owner","status":"active"},
+				{"id":"peer-carol","handle":"alice/carol","name":"carol","type":"User","role":"member","status":"inactive"}
+			]}`))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+	// Overwrite the harness's session config to point at this new server.
+	writeProfileConfig(t, h.home, "", srv.URL, "band_u_test")
+
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"chat", "show", "chat-1"}, nil, &stdout, &stderr, h.env())
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, stderr.String())
+	}
+	for _, want := range []string{"peer-bob", "alice/bob", "Agent", "peer-carol", "alice/carol", "User"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("chat show output missing %q\ngot:\n%s", want, stdout.String())
+		}
+	}
+}
+
 func TestChatAdd_ErrorsForUnknownHandle(t *testing.T) {
 	h := newChatHarness(t)
 	var stdout, stderr bytes.Buffer

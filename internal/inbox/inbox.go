@@ -20,12 +20,13 @@ type Notification struct {
 }
 
 type BandFields struct {
-	ChatID     string `json:"chat_id"`
-	MessageID  string `json:"message_id"`
-	SenderID   string `json:"sender_id"`
-	SenderName string `json:"sender_name"`
-	SenderType string `json:"sender_type"`
-	Content    string `json:"content"`
+	ChatID       string `json:"chat_id"`
+	MessageID    string `json:"message_id"`
+	SenderID     string `json:"sender_id"`
+	SenderName   string `json:"sender_name"`
+	SenderHandle string `json:"sender_handle,omitempty"`
+	SenderType   string `json:"sender_type"`
+	Content      string `json:"content"`
 }
 
 func Path(homeDir, teamName, teammateName string) string {

@@ -15,6 +15,89 @@ import (
 	"github.com/ed-lepedus-thenvoi/jam/internal/inbox"
 )
 
+// minimalCache is a tiny helper that produces a peerCache whose only entry
+// is the synthetic self. Useful for tests that don't care about peer lookup
+// (the older tests pre-dating slice 21).
+func minimalCache(t *testing.T, client *band.Client) *peerCache {
+	t.Helper()
+	return newPeerCache(client, &band.Identity{ID: "self-id", Name: "self", Handle: "alice/self"})
+}
+
+func TestHandleIncoming_PopulatesSenderHandle(t *testing.T) {
+	home := t.TempDir()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/agent/peers", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"peer-bob","name":"bob","handle":"alice/bob","type":"Agent"}]}`))
+	})
+	mux.HandleFunc("/api/v1/agent/chats/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := Config{BaseURL: srv.URL, AgentAPIKey: "k", HomeDir: home, TeamName: "t", TeammateName: "tl"}
+	tmpl, _ := loadTemplate("")
+	client := band.New(cfg.BaseURL, cfg.AgentAPIKey)
+	cache := newPeerCache(client, &band.Identity{ID: "self-id", Name: "self", Handle: "alice/self"})
+	logger := log.New(&bytes.Buffer{}, "", 0)
+
+	handleIncoming(cfg, tmpl, cache, client, logger, incomingMessage{
+		ChatID: "c", MessageID: "m", SenderID: "peer-bob",
+		SenderName: "bob", SenderType: "Agent", Content: "hi",
+	})
+
+	data, _ := os.ReadFile(inbox.Path(home, "t", "tl"))
+	var notes []inbox.Notification
+	_ = json.Unmarshal(data, &notes)
+	if len(notes) != 1 {
+		t.Fatalf("want 1 notification, got %d", len(notes))
+	}
+	if notes[0].Band.SenderHandle != "alice/bob" {
+		t.Errorf("sender_handle = %q, want alice/bob", notes[0].Band.SenderHandle)
+	}
+}
+
+func TestHandleIncoming_RewritesInboundUUIDMentions(t *testing.T) {
+	home := t.TempDir()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/agent/peers", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"peer-bob","name":"bob","handle":"alice/bob","type":"Agent"}]}`))
+	})
+	mux.HandleFunc("/api/v1/agent/chats/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := Config{BaseURL: srv.URL, AgentAPIKey: "k", HomeDir: home, TeamName: "t", TeammateName: "tl"}
+	tmpl, _ := loadTemplate("")
+	client := band.New(cfg.BaseURL, cfg.AgentAPIKey)
+	cache := newPeerCache(client, &band.Identity{ID: "self-id", Name: "self", Handle: "alice/self"})
+	logger := log.New(&bytes.Buffer{}, "", 0)
+
+	// Content includes @[[bob's id]] and @[[self id]] — both should become
+	// readable @owner/handle in the rendered inbox text. An unknown UUID
+	// stays as-is.
+	handleIncoming(cfg, tmpl, cache, client, logger, incomingMessage{
+		ChatID: "c", MessageID: "m", SenderID: "peer-bob",
+		SenderName: "bob", SenderType: "Agent",
+		Content: "@[[peer-bob]] told @[[self-id]] something; @[[ghost-id]] watched",
+	})
+
+	data, _ := os.ReadFile(inbox.Path(home, "t", "tl"))
+	var notes []inbox.Notification
+	_ = json.Unmarshal(data, &notes)
+	text := notes[0].Text
+	for _, want := range []string{"@alice/bob", "@alice/self", "@[[ghost-id]]"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("rendered text missing %q\ngot:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "@[[peer-bob]]") || strings.Contains(text, "@[[self-id]]") {
+		t.Errorf("known UUIDs should be rewritten, got:\n%s", text)
+	}
+}
+
 func TestHandleIncoming_PostsProcessingAndWritesInbox(t *testing.T) {
 	home := t.TempDir()
 	var processedHits atomic.Int32
@@ -53,7 +136,7 @@ func TestHandleIncoming_PostsProcessingAndWritesInbox(t *testing.T) {
 		SenderType: "Agent",
 		Content:    "hello there",
 	}
-	handleIncoming(cfg, tmpl, client, logger, msg)
+	handleIncoming(cfg, tmpl, minimalCache(t, client), client, logger, msg)
 
 	if got := processedHits.Load(); got != 1 {
 		t.Errorf("expected 1 processing call, got %d", got)
@@ -107,7 +190,7 @@ func TestHandleIncoming_NoTeamSkipsInbox(t *testing.T) {
 	client := band.New(cfg.BaseURL, cfg.AgentAPIKey)
 	logger := log.New(&bytes.Buffer{}, "", 0)
 
-	handleIncoming(cfg, tmpl, client, logger, incomingMessage{
+	handleIncoming(cfg, tmpl, minimalCache(t, client), client, logger, incomingMessage{
 		ChatID: "c", MessageID: "m", SenderName: "x",
 	})
 
@@ -135,7 +218,7 @@ func TestHandleIncoming_AppendsMultipleNotifications(t *testing.T) {
 	logger := log.New(&bytes.Buffer{}, "", 0)
 
 	for i, mid := range []string{"m1", "m2", "m3"} {
-		handleIncoming(cfg, tmpl, client, logger, incomingMessage{
+		handleIncoming(cfg, tmpl, minimalCache(t, client), client, logger, incomingMessage{
 			ChatID: "c", MessageID: mid, SenderName: "x",
 			SenderID: "id", SenderType: "Agent", Content: "n",
 		})

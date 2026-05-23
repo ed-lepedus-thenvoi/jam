@@ -6,6 +6,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -62,6 +63,81 @@ func findPeerByHandle(peers []band.Peer, handle string) *band.Peer {
 	return nil
 }
 
+// resolveMentions takes a list of full owner/handle strings and returns the
+// corresponding Mention entries (id + name + handle). The sender's own handle
+// is skipped silently — you can't be in your own peers list. If the first
+// /agent/peers call misses any handle, retries once after a short delay to
+// paper over the platform's peer-index propagation lag.
+func resolveMentions(client *band.Client, selfHandle string, handles []string) ([]band.Mention, error) {
+	resolve := func(peers []band.Peer) (mentions []band.Mention, missing []string) {
+		for _, h := range handles {
+			if h == selfHandle {
+				continue
+			}
+			peer := findPeerByHandle(peers, h)
+			if peer == nil {
+				missing = append(missing, h)
+				continue
+			}
+			mentions = append(mentions, band.Mention{
+				ID: peer.ID, Name: shortNameFromHandle(h), Handle: h,
+			})
+		}
+		return
+	}
+
+	peers, err := client.ListPeers()
+	if err != nil {
+		return nil, fmt.Errorf("listing peers: %w", err)
+	}
+	mentions, missing := resolve(peers)
+	if len(missing) == 0 {
+		return mentions, nil
+	}
+
+	// Brief retry against a freshened peer list.
+	time.Sleep(500 * time.Millisecond)
+	peers, err = client.ListPeers()
+	if err != nil {
+		return nil, fmt.Errorf("listing peers (retry): %w", err)
+	}
+	mentions, missing = resolve(peers)
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("@%s not found in your peer network (have you joined a chat with them, or are they outside the visible peer page?)", missing[0])
+	}
+	return mentions, nil
+}
+
+// waitForPeerVisibility polls /agent/peers until every handle in `want` is
+// visible, or the timeout fires. Returns the still-missing handles (empty on
+// success). Best-effort — surfaces missing handles via the return rather than
+// erroring so the caller can warn or proceed.
+func waitForPeerVisibility(client *band.Client, want []string, timeout time.Duration) []string {
+	deadline := time.Now().Add(timeout)
+	missing := append([]string{}, want...)
+	for time.Now().Before(deadline) && len(missing) > 0 {
+		peers, err := client.ListPeers()
+		if err == nil {
+			byHandle := make(map[string]bool, len(peers))
+			for _, p := range peers {
+				byHandle[p.Handle] = true
+			}
+			next := missing[:0]
+			for _, h := range missing {
+				if !byHandle[h] {
+					next = append(next, h)
+				}
+			}
+			missing = next
+		}
+		if len(missing) == 0 {
+			return nil
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return missing
+}
+
 
 func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
@@ -90,28 +166,9 @@ func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comm
 			}
 
 			client := band.New(cfg.BaseURL, st.AgentAPIKey)
-			peers, err := client.ListPeers()
+			mentions, err := resolveMentions(client, st.Handle, handles)
 			if err != nil {
-				return fmt.Errorf("listing peers: %w", err)
-			}
-
-			var mentions []band.Mention
-			for _, h := range handles {
-				// The sender's own handle can never be in their peers list — you
-				// aren't your own peer. Leave the @text in content for readability,
-				// but skip it for the mentions array.
-				if h == st.Handle {
-					continue
-				}
-				peer := findPeerByHandle(peers, h)
-				if peer == nil {
-					return fmt.Errorf("@%s not found in your peer network (have you joined a chat with them, or are they outside the visible peer page?)", h)
-				}
-				mentions = append(mentions, band.Mention{
-					ID:     peer.ID,
-					Name:   shortNameFromHandle(h),
-					Handle: h,
-				})
+				return err
 			}
 			if len(mentions) == 0 {
 				return fmt.Errorf("message had only your own handle (@%s) mentioned; Band requires at least one resolvable @-mention to someone else", st.Handle)
@@ -229,8 +286,42 @@ func newReplyCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *c
 			}
 
 			client := band.New(cfg.BaseURL, st.AgentAPIKey)
-			content := "@" + n.Band.SenderName + " " + replyText
-			mentions := []band.Mention{{ID: n.Band.SenderID, Name: n.Band.SenderName}}
+
+			// Resolve any @-mentions the user typed in replyText (same as jam send).
+			handles := extractHandles(replyText)
+			mentions, err := resolveMentions(client, st.Handle, handles)
+			if err != nil {
+				return err
+			}
+
+			// Make sure the sender ends up in the mentions array. Check by id
+			// rather than by handle so a user who typed @owner/short for the
+			// sender doesn't get them double-prepended.
+			senderInMentions := false
+			for _, m := range mentions {
+				if m.ID == n.Band.SenderID {
+					senderInMentions = true
+					break
+				}
+			}
+
+			senderDisplay := n.Band.SenderHandle
+			if senderDisplay == "" {
+				senderDisplay = n.Band.SenderName
+			}
+
+			var content string
+			if senderInMentions {
+				content = replyText
+			} else {
+				content = "@" + senderDisplay + " " + replyText
+				mentions = append(mentions, band.Mention{
+					ID:     n.Band.SenderID,
+					Name:   n.Band.SenderName,
+					Handle: n.Band.SenderHandle,
+				})
+			}
+
 			newID, err := client.SendChatMessage(n.Band.ChatID, content, mentions)
 			if err != nil {
 				return fmt.Errorf("sending reply: %w", err)

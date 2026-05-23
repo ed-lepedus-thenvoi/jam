@@ -180,6 +180,53 @@ func TestSend_ErrorsWhenOnlySenderMentioned(t *testing.T) {
 	}
 }
 
+func TestSend_RetriesResolutionOnMiss(t *testing.T) {
+	// Simulates platform peer-list eventual consistency: first /agent/peers
+	// call shows an empty list, second call shows the actual peer. Send
+	// should retry once and succeed rather than erroring on the first miss.
+	home := t.TempDir()
+	cwd := t.TempDir()
+	var peersCalls atomic.Int32
+	var sentBody atomic.Value
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/agent/peers", func(w http.ResponseWriter, r *http.Request) {
+		n := peersCalls.Add(1)
+		if n == 1 {
+			_, _ = w.Write([]byte(`{"data":[]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"peer-bob","name":"bob","handle":"alice/bob","type":"Agent"}]}`))
+	})
+	mux.HandleFunc("/api/v1/agent/chats/", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		sentBody.Store(body)
+		_, _ = w.Write([]byte(`{"data":{"id":"sent-msg-id","success":true}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	writeConfig(t, home, srv.URL, "band_u_test")
+	scope := session.Scope(cwd)
+	if err := session.Save(home, "", &session.State{
+		Scope: scope, Cwd: cwd, AgentID: "self", AgentName: "self",
+		AgentAPIKey: "band_a_SELF", Handle: "alice/self", PID: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"send", "chat-1", "@alice/bob propagation"}, nil, &stdout, &stderr,
+		Env{HomeDir: home, Cwd: cwd, Getenv: func(string) string { return "" }})
+	if code != 0 {
+		t.Fatalf("expected retry to succeed, got exit %d\n%s", code, stderr.String())
+	}
+	if got := peersCalls.Load(); got < 2 {
+		t.Errorf("expected at least 2 ListPeers calls (initial + retry), got %d", got)
+	}
+	if sentBody.Load() == nil {
+		t.Errorf("expected message to be sent after retry")
+	}
+}
+
 func TestSend_ErrorsWhenHandleNotInPeers(t *testing.T) {
 	h := newMsgHarness(t)
 	var stdout, stderr bytes.Buffer
@@ -249,6 +296,61 @@ func TestAck_ErrorsWhenMsgNotInInbox(t *testing.T) {
 	code := Execute([]string{"ack", "nope"}, nil, &stdout, &stderr, h.env())
 	if code == 0 {
 		t.Fatalf("expected nonzero exit when message id not in inbox")
+	}
+}
+
+func TestReply_ResolvesAdditionalMentionsAndKeepsSender(t *testing.T) {
+	h := newMsgHarness(t)
+	h.writeInbox(t, []inbox.Notification{
+		{Band: &inbox.BandFields{
+			ChatID: "chat-1", MessageID: "msg-1",
+			SenderID: "peer-bob", SenderName: "bob", SenderHandle: "alice/bob",
+		}},
+	})
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"reply", "msg-1", "@alice/carol heads up — bob's response below"},
+		nil, &stdout, &stderr, h.env())
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, stderr.String())
+	}
+	body := h.sentMessageBody(t)
+	msg := body["message"].(map[string]any)
+	mentions := msg["mentions"].([]any)
+	if len(mentions) != 2 {
+		t.Fatalf("expected 2 mentions (carol + auto-sender), got %d: %v", len(mentions), mentions)
+	}
+	ids := map[string]bool{}
+	for _, m := range mentions {
+		ids[m.(map[string]any)["id"].(string)] = true
+	}
+	if !ids["peer-bob"] || !ids["peer-carol"] {
+		t.Errorf("mention ids = %v; want both peer-bob and peer-carol", ids)
+	}
+}
+
+func TestReply_DoesNotDoublePrependSenderAlreadyInText(t *testing.T) {
+	h := newMsgHarness(t)
+	h.writeInbox(t, []inbox.Notification{
+		{Band: &inbox.BandFields{
+			ChatID: "chat-1", MessageID: "msg-1",
+			SenderID: "peer-bob", SenderName: "bob", SenderHandle: "alice/bob",
+		}},
+	})
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"reply", "msg-1", "@alice/bob explicit mention"},
+		nil, &stdout, &stderr, h.env())
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, stderr.String())
+	}
+	body := h.sentMessageBody(t)
+	msg := body["message"].(map[string]any)
+	content := msg["content"].(string)
+	if strings.Count(content, "@alice/bob") != 1 {
+		t.Errorf("expected exactly one @alice/bob in content, got: %s", content)
+	}
+	mentions := msg["mentions"].([]any)
+	if len(mentions) != 1 {
+		t.Errorf("expected exactly one mention, got %d", len(mentions))
 	}
 }
 

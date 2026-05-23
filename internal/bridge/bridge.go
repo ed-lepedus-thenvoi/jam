@@ -106,7 +106,8 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("parsing notify template: %w", err)
 	}
 
-	rooms := newRoomTracker(socket, cfg, tmpl, client, logger)
+	cache := newPeerCache(client, identity)
+	rooms := newRoomTracker(socket, cfg, tmpl, cache, client, logger)
 
 	// Wire agent_rooms first so we don't miss room_added events that fire
 	// while we're pre-fetching existing chats.
@@ -160,16 +161,18 @@ type roomTracker struct {
 	socket *phx.Socket
 	cfg    Config
 	tmpl   *template.Template
+	cache  *peerCache
 	client *band.Client
 	logger *log.Logger
 }
 
-func newRoomTracker(socket *phx.Socket, cfg Config, tmpl *template.Template, client *band.Client, logger *log.Logger) *roomTracker {
+func newRoomTracker(socket *phx.Socket, cfg Config, tmpl *template.Template, cache *peerCache, client *band.Client, logger *log.Logger) *roomTracker {
 	return &roomTracker{
 		joined: map[string]bool{},
 		socket: socket,
 		cfg:    cfg,
 		tmpl:   tmpl,
+		cache:  cache,
 		client: client,
 		logger: logger,
 	}
@@ -195,7 +198,7 @@ func (r *roomTracker) join(roomID string) {
 			SenderType: stringField(payload, "sender_type"),
 			Content:    stringField(payload, "content"),
 		}
-		handleIncoming(r.cfg, r.tmpl, r.client, r.logger, msg)
+		handleIncoming(r.cfg, r.tmpl, r.cache, r.client, r.logger, msg)
 	})
 	join, err := ch.Join()
 	if err != nil {

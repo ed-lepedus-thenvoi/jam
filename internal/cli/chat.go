@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +19,47 @@ func newChatCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *co
 	cmd.AddCommand(newChatNewCmd(stdout, stderr, env, getProfile))
 	cmd.AddCommand(newChatListCmd(stdout, env, getProfile))
 	cmd.AddCommand(newChatAddCmd(stdout, env, getProfile))
+	cmd.AddCommand(newChatShowCmd(stdout, env, getProfile))
 	return cmd
+}
+
+func newChatShowCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "show <chat_id>",
+		Short: "List participants in a chat (with full handles)",
+		Long: "Useful when you've joined a chat (or someone messaged you) and you want to " +
+			"discover full owner/handle for follow-up `jam send` calls. The inbox JSON's " +
+			"sender_handle covers the case of who messaged you; this covers everyone else.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			chatID := args[0]
+			profile := getProfile()
+			st, err := loadSession(env, profile)
+			if err != nil {
+				return err
+			}
+			cfg, err := loadConfigOrHint(env.HomeDir, profile)
+			if err != nil {
+				return err
+			}
+			parts, err := band.New(cfg.BaseURL, st.AgentAPIKey).ListParticipants(chatID)
+			if err != nil {
+				return fmt.Errorf("listing participants: %w", err)
+			}
+			if len(parts) == 0 {
+				fmt.Fprintln(stdout, "(no participants)")
+				return nil
+			}
+			for _, p := range parts {
+				handle := p.Handle
+				if handle == "" {
+					handle = "(no handle)"
+				}
+				fmt.Fprintf(stdout, "%s  %s  %s  %s  %s\n", p.ID, handle, p.Type, p.Role, p.Status)
+			}
+			return nil
+		},
+	}
 }
 
 func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
@@ -54,6 +95,7 @@ func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile func() string) 
 			if err != nil {
 				return fmt.Errorf("listing peers to resolve --with: %w", err)
 			}
+			var added []string
 			for _, h := range withHandles {
 				h = strings.TrimPrefix(h, "@")
 				peer := findPeerByHandle(peers, h)
@@ -66,6 +108,17 @@ func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile func() string) 
 					continue
 				}
 				fmt.Fprintf(stdout, "Added @%s\n", h)
+				added = append(added, h)
+			}
+			// Block until each added handle is visible via /agent/peers
+			// before returning — peer-index propagation lag would otherwise
+			// make the next `jam send` flap. Best-effort with a short timeout.
+			if len(added) > 0 {
+				if missing := waitForPeerVisibility(client, added, 3*time.Second); len(missing) > 0 {
+					for _, h := range missing {
+						fmt.Fprintf(stderr, "warning: @%s added but not yet visible in peers after 3s; `jam send` will retry\n", h)
+					}
+				}
 			}
 			return nil
 		},

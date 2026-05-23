@@ -201,6 +201,27 @@ func (c *Client) ListAgentChats() ([]ChatRoom, error) {
 	return env.Data, nil
 }
 
+type Participant struct {
+	ID     string `json:"id"`
+	Handle string `json:"handle"`
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Role   string `json:"role"`
+	Status string `json:"status"`
+}
+
+// ListParticipants returns the participants in a chat (full handles included
+// — the answer to "who's in here?" when you only have a chat id).
+func (c *Client) ListParticipants(chatID string) ([]Participant, error) {
+	var env struct {
+		Data []Participant `json:"data"`
+	}
+	if err := c.do("GET", "/api/v1/agent/chats/"+chatID+"/participants", nil, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
 // AddParticipant adds a peer to a chat. role defaults to "member" if empty.
 func (c *Client) AddParticipant(chatID, participantID, role string) error {
 	if role == "" {
