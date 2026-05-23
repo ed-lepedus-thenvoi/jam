@@ -202,6 +202,86 @@ func TestDaemonStop_KillsDeletesAndCleans(t *testing.T) {
 	}
 }
 
+func TestDaemonStop_KeepSkipsAgentDelete(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	if code := Execute([]string{"daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("start failed")
+	}
+	scope := session.Scope(h.cwd)
+	st, _ := session.Load(h.home, "", scope)
+	pidBefore := st.PID
+
+	var stdout, stderr bytes.Buffer
+	if code := Execute([]string{"daemon", "stop", "--keep"}, nil, &stdout, &stderr, env); code != 0 {
+		t.Fatalf("stop --keep failed: exit %d\n%s", code, stderr.String())
+	}
+	if got := h.deleteCalls.Load(); got != 0 {
+		t.Errorf("expected NO DELETE calls with --keep, got %d", got)
+	}
+	if _, err := session.Load(h.home, "", scope); err == nil {
+		t.Errorf("expected local session state removed even with --keep")
+	}
+	for i := 0; i < 20 && processAlive(pidBefore); i++ {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if processAlive(pidBefore) {
+		t.Errorf("expected PID %d to be dead after stop --keep", pidBefore)
+	}
+}
+
+func TestDaemonRestart_BouncesBridgeKeepsAgent(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	if code := Execute([]string{"daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("start failed")
+	}
+	scope := session.Scope(h.cwd)
+	st1, _ := session.Load(h.home, "", scope)
+	oldPID := st1.PID
+	agentID := st1.AgentID
+
+	var stdout, stderr bytes.Buffer
+	if code := Execute([]string{"daemon", "restart"}, nil, &stdout, &stderr, env); code != 0 {
+		t.Fatalf("restart failed: exit %d\n%s", code, stderr.String())
+	}
+	if got := h.registerCalls.Load(); got != 1 {
+		t.Errorf("expected register count to remain 1 across restart, got %d", got)
+	}
+	if got := h.deleteCalls.Load(); got != 0 {
+		t.Errorf("expected NO DELETE during restart, got %d", got)
+	}
+	st2, _ := session.Load(h.home, "", scope)
+	if st2.AgentID != agentID {
+		t.Errorf("AgentID should be preserved across restart: was %s, now %s", agentID, st2.AgentID)
+	}
+	if st2.PID == oldPID {
+		t.Errorf("PID should have changed after restart (still %d)", oldPID)
+	}
+	for i := 0; i < 20 && processAlive(oldPID); i++ {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if processAlive(oldPID) {
+		t.Errorf("expected old PID %d to be dead after restart", oldPID)
+	}
+	if !processAlive(st2.PID) {
+		t.Errorf("expected new PID %d to be alive after restart", st2.PID)
+	}
+}
+
+func TestDaemonRestart_ErrorsIfNoState(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"daemon", "restart"}, nil, &stdout, &stderr, env)
+	if code == 0 {
+		t.Fatalf("expected nonzero exit when no session state")
+	}
+	if !strings.Contains(stderr.String(), "onboard") {
+		t.Errorf("expected hint about 'onboard', got: %s", stderr.String())
+	}
+}
+
 func TestDaemonStatus_ShowsRunningAndNotRunning(t *testing.T) {
 	h := newDaemonHarness(t)
 	env := h.env(t)

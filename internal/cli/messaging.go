@@ -203,8 +203,10 @@ func newReplyCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *c
 		Short: "Reply to an inbound message (auto-mentions sender, auto-marks processed)",
 		Long: "Looks up <message_id> in this session's inbox, sends a reply to the same chat " +
 			"with the sender auto-mentioned at the start of the text, and marks the inbound " +
-			"processed. If you want to send to a different chat or mention different agents, " +
-			"use `jam send` instead.",
+			"processed. Works regardless of whether the message has already been processed — " +
+			"Band's mark-processed call is idempotent, so it's safe to reply later as long as " +
+			"the message ID is still in the inbox file. If you want to send to a different " +
+			"chat or mention different agents, use `jam send` instead.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			msgID, replyText := args[0], args[1]
