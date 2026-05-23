@@ -17,11 +17,15 @@ import (
 )
 
 // handleRegex matches @<owner>/<name> (agent form) or @<slug> (human form)
-// in message text. The /<name> segment is optional so single-segment human
-// handles (e.g. `@ed.lepedus`) are captured alongside the longer agent form.
-// The leading @ is consumed but not captured. Greedy matching means full
-// agent handles are preferred over their prefix when the slash is present.
-var handleRegex = regexp.MustCompile(`@([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)`)
+// in message text. Each segment must START with an alphanumeric to keep
+// common prose patterns from triggering spurious resolution attempts —
+// e.g. `@-mention` (leading hyphen) and `@_init` (leading underscore) are
+// no longer matched. Inside the segment, hyphen/dot/underscore are fine.
+// The /<name> segment is optional so single-segment human handles
+// (e.g. `@ed.lepedus`) are captured alongside the longer agent form.
+// Greedy matching means full agent handles are preferred over their prefix
+// when the slash is present.
+var handleRegex = regexp.MustCompile(`@([A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)?)`)
 
 func loadSession(env Env, profile string) (*session.State, error) {
 	scope := session.Scope(env.Cwd)
@@ -67,11 +71,14 @@ func findPeerByHandle(peers []band.Peer, handle string) *band.Peer {
 }
 
 // resolveMentions takes a list of full owner/handle strings and returns the
-// corresponding Mention entries (id + name + handle). The sender's own handle
-// is skipped silently — you can't be in your own peers list. If the first
-// /agent/peers call misses any handle, retries once after a short delay to
-// paper over the platform's peer-index propagation lag.
-func resolveMentions(client *band.Client, selfHandle string, handles []string) ([]band.Mention, error) {
+// corresponding Mention entries (id + name + handle). Unresolvable handles
+// are SKIPPED with a stderr warning rather than erroring the whole send —
+// prose patterns like the literal phrase `@owner/handle` in a docs example
+// would otherwise crash a message that also contained legit mentions. The
+// sender's own handle is skipped silently (you can't be in your own peers).
+// On any miss, retries once after a brief delay to absorb the platform's
+// peer-index propagation lag before declaring missing.
+func resolveMentions(client *band.Client, selfHandle string, handles []string, stderr io.Writer) ([]band.Mention, error) {
 	resolve := func(peers []band.Peer) (mentions []band.Mention, missing []string) {
 		for _, h := range handles {
 			if h == selfHandle {
@@ -102,8 +109,8 @@ func resolveMentions(client *band.Client, selfHandle string, handles []string) (
 			return nil, fmt.Errorf("listing peers (retry): %w", err)
 		}
 		mentions, missing = resolve(peers)
-		if len(missing) > 0 {
-			return nil, fmt.Errorf("@%s not found in your peer network (have you joined a chat with them, or are they outside the visible peer page?)", missing[0])
+		for _, h := range missing {
+			fmt.Fprintf(stderr, "warning: @%s not in your peer network — skipping (will appear as literal text in the message)\n", h)
 		}
 	}
 	// Sort longest-handle-first so the platform's String.replace_all pass
@@ -149,13 +156,14 @@ func waitForPeerVisibility(client *band.Client, want []string, timeout time.Dura
 }
 
 
-func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newSendCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "send <chat_id> <message>",
 		Short: "Send a chat message; @-mentions in the text are resolved automatically",
 		Long: "Parses @owner/handle patterns in the message, resolves them to UUIDs via " +
 			"/api/v1/agent/peers, and POSTs to /api/v1/agent/chats/<id>/messages. Band requires " +
-			"at least one resolved @-mention or it rejects with 422.",
+			"at least one resolved @-mention or it rejects with 422. Unresolvable @-text (typos, " +
+			"prose examples) emits a stderr warning and is left as literal text in the message.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			chatID, content := args[0], args[1]
@@ -176,12 +184,12 @@ func newSendCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comm
 			}
 
 			client := band.New(cfg.BaseURL, st.AgentAPIKey)
-			mentions, err := resolveMentions(client, st.Handle, handles)
+			mentions, err := resolveMentions(client, st.Handle, handles, stderr)
 			if err != nil {
 				return err
 			}
 			if len(mentions) == 0 {
-				return fmt.Errorf("message had only your own handle (@%s) mentioned; Band requires at least one resolvable @-mention to someone else", st.Handle)
+				return fmt.Errorf("no resolvable @-mention to someone other than yourself; Band requires at least one (typos and prose examples skipped automatically — see stderr warnings)")
 			}
 			// Text is preserved as the user wrote it. Band's resolver matches
 			// `@<handle>` (globally unique) before falling back to `@<name>`,
@@ -299,7 +307,7 @@ func newReplyCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *c
 
 			// Resolve any @-mentions the user typed in replyText (same as jam send).
 			handles := extractHandles(replyText)
-			mentions, err := resolveMentions(client, st.Handle, handles)
+			mentions, err := resolveMentions(client, st.Handle, handles, stderr)
 			if err != nil {
 				return err
 			}

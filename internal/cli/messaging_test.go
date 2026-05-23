@@ -243,6 +243,53 @@ func TestSend_SkipsSenderOwnHandle(t *testing.T) {
 	}
 }
 
+func TestSend_SkipsUnresolvableButProceedsWithRest(t *testing.T) {
+	// User's text contains both a real mention AND a prose @-pattern that
+	// looks like a handle but doesn't resolve (e.g. `@owner/handle` in docs
+	// examples). The send should warn about the bogus one and proceed with
+	// the legit one, not abort the whole message.
+	h := newMsgHarness(t)
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"send", "chat-1", "see @alice/bob and example @owner/handle"},
+		nil, &stdout, &stderr, h.env())
+	if code != 0 {
+		t.Fatalf("expected send to succeed by skipping the bogus prose-mention; exit %d\n%s", code, stderr.String())
+	}
+	body := h.sentMessageBody(t)
+	mentions := body["message"].(map[string]any)["mentions"].([]any)
+	if len(mentions) != 1 {
+		t.Errorf("expected only the legit mention to land, got %d: %v", len(mentions), mentions)
+	}
+	if !strings.Contains(stderr.String(), "owner/handle") {
+		t.Errorf("expected stderr warning about owner/handle, got: %s", stderr.String())
+	}
+}
+
+func TestExtractHandles_RejectsLeadingPunctuation(t *testing.T) {
+	// Prose patterns that should NOT be picked up as mentions: `@-mention`
+	// (leading hyphen), `@_init` (leading underscore), `@.foo` (leading dot).
+	// Real handles always start with alphanumeric.
+	cases := map[string][]string{
+		"@-mention please":            nil,
+		"@_init makes no sense":       nil,
+		"@.foo ignored":               nil,
+		"@ed.lepedus is fine":         {"ed.lepedus"},
+		"@ed.lepedus/claude-foo also": {"ed.lepedus/claude-foo"},
+	}
+	for in, want := range cases {
+		got := extractHandles(in)
+		if len(got) != len(want) {
+			t.Errorf("extractHandles(%q) = %v; want %v", in, got, want)
+			continue
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("extractHandles(%q)[%d] = %q; want %q", in, i, got[i], want[i])
+			}
+		}
+	}
+}
+
 func TestSend_ErrorsWhenOnlySenderMentioned(t *testing.T) {
 	h := newMsgHarness(t)
 	var stdout, stderr bytes.Buffer
