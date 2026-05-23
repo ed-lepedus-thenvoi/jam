@@ -11,19 +11,19 @@ import (
 	"github.com/ed-lepedus-thenvoi/jam/internal/band"
 )
 
-func newChatCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newChatCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chat",
 		Short: "Create, list, and add participants to Band chats",
 	}
-	cmd.AddCommand(newChatNewCmd(stdout, stderr, env, getProfile))
-	cmd.AddCommand(newChatListCmd(stdout, env, getProfile))
-	cmd.AddCommand(newChatAddCmd(stdout, env, getProfile))
-	cmd.AddCommand(newChatShowCmd(stdout, env, getProfile))
+	cmd.AddCommand(newChatNewCmd(stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newChatListCmd(stdout, env, getProfile, getScope))
+	cmd.AddCommand(newChatAddCmd(stdout, env, getProfile, getScope))
+	cmd.AddCommand(newChatShowCmd(stdout, env, getProfile, getScope))
 	return cmd
 }
 
-func newChatShowCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newChatShowCmd(stdout io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <chat_id>",
 		Short: "List participants in a chat (with full handles)",
@@ -34,7 +34,7 @@ func newChatShowCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			chatID := args[0]
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func newChatShowCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.
 	}
 }
 
-func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	var withHandles []string
 	cmd := &cobra.Command{
 		Use:   "new",
@@ -72,7 +72,7 @@ func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile func() string) 
 			"resolved, the chat is still created but a warning is printed for that handle.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}
@@ -127,13 +127,13 @@ func newChatNewCmd(stdout, stderr io.Writer, env Env, getProfile func() string) 
 	return cmd
 }
 
-func newChatListCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newChatListCmd(stdout io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List Band chats this session's agent is in",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}
@@ -162,7 +162,7 @@ func newChatListCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.
 	}
 }
 
-func newChatAddCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newChatAddCmd(stdout io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "add <chat_id> <handle...>",
 		Short: "Add participants to a chat by handle",
@@ -174,7 +174,7 @@ func newChatAddCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.C
 			chatID := args[0]
 			rawHandles := args[1:]
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}

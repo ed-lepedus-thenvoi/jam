@@ -6,10 +6,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ed-lepedus-thenvoi/jam/internal/config"
+	"github.com/ed-lepedus-thenvoi/jam/internal/session"
 )
 
 func newRootCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Command {
-	var profileFlag string
+	var profileFlag, sessionFlag string
 	cmd := &cobra.Command{
 		Use:           "jam",
 		Short:         "Coordinate Claude Code sessions with remote agents on Band",
@@ -24,6 +25,8 @@ func newRootCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Comma
 	// `version` subcommand below too.
 	cmd.SetVersionTemplate("jam {{.Version}}\n")
 	cmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "Profile name (overrides JAM_PROFILE; defaults to 'default')")
+	cmd.PersistentFlags().StringVar(&sessionFlag, "session", "",
+		"Session name (overrides JAM_SESSION; defaults to a per-cwd hash). Use to control multiple Band agents from one Claude Code session.")
 
 	getProfile := func() string {
 		if profileFlag != "" {
@@ -37,16 +40,32 @@ func newRootCmd(stdin io.Reader, stdout, stderr io.Writer, env Env) *cobra.Comma
 		return config.DefaultProfile
 	}
 
+	// getScope resolves the session-state scope key: explicit --session flag
+	// wins, then JAM_SESSION env, then the per-cwd hash fallback. The flag
+	// form is the seam that lets one Claude Code session puppet multiple
+	// Band agents (each with its own scope, daemon, inbox, etc.).
+	getScope := func() string {
+		if sessionFlag != "" {
+			return sessionFlag
+		}
+		if env.Getenv != nil {
+			if s := env.Getenv("JAM_SESSION"); s != "" {
+				return s
+			}
+		}
+		return session.Scope(env.Cwd)
+	}
+
 	cmd.AddCommand(newInitCmd(stdin, stdout, stderr, env, getProfile))
 	cmd.AddCommand(newWhoamiCmd(stdin, stdout, stderr, env, getProfile))
 	cmd.AddCommand(newAgentCmd(stdin, stdout, stderr, env, getProfile))
-	cmd.AddCommand(newDaemonCmd(stdin, stdout, stderr, env, getProfile))
-	cmd.AddCommand(newOnboardCmd(stdin, stdout, stderr, env, getProfile))
-	cmd.AddCommand(newSendCmd(stdout, stderr, env, getProfile))
-	cmd.AddCommand(newReplyCmd(stdout, stderr, env, getProfile))
-	cmd.AddCommand(newInboxCmd(stdout, env, getProfile))
-	cmd.AddCommand(newAckCmd(stdout, env, getProfile))
-	cmd.AddCommand(newChatCmd(stdout, stderr, env, getProfile))
+	cmd.AddCommand(newDaemonCmd(stdin, stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newOnboardCmd(stdin, stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newSendCmd(stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newReplyCmd(stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newInboxCmd(stdout, env, getProfile, getScope))
+	cmd.AddCommand(newAckCmd(stdout, env, getProfile, getScope))
+	cmd.AddCommand(newChatCmd(stdout, stderr, env, getProfile, getScope))
 	cmd.AddCommand(newPluginCmd(stdout, stderr))
 	cmd.AddCommand(newInternalBridgeCmd(stdout, stderr, env))
 	cmd.AddCommand(newVersionCmd(stdout, env))

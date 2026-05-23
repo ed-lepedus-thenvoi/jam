@@ -282,6 +282,62 @@ func TestDaemonRestart_ErrorsIfNoState(t *testing.T) {
 	}
 }
 
+func TestSession_FlagSelectsExplicitScope(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	if code := Execute([]string{"--session", "alice", "daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("start with --session failed")
+	}
+	if _, err := session.Load(h.home, "", "alice"); err != nil {
+		t.Errorf("expected session file at scope=alice, got %v", err)
+	}
+	if _, err := session.Load(h.home, "", session.Scope(h.cwd)); err == nil {
+		t.Errorf("expected NO session file at cwd-derived scope when --session is set")
+	}
+}
+
+func TestSession_TwoSessionsCoexist(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	if code := Execute([]string{"--session", "alice", "daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("alice start failed")
+	}
+	if code := Execute([]string{"--session", "bob", "daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("bob start failed")
+	}
+	if got := h.registerCalls.Load(); got != 2 {
+		t.Errorf("expected 2 register calls (one per session), got %d", got)
+	}
+	stA, _ := session.Load(h.home, "", "alice")
+	stB, _ := session.Load(h.home, "", "bob")
+	if stA == nil || stB == nil {
+		t.Fatalf("both session files must exist (alice=%v bob=%v)", stA, stB)
+	}
+	if stA.PID == stB.PID {
+		t.Errorf("alice and bob should have distinct PIDs")
+	}
+	if !processAlive(stA.PID) || !processAlive(stB.PID) {
+		t.Errorf("both bridges must be alive (alice=%d bob=%d)", stA.PID, stB.PID)
+	}
+}
+
+func TestSession_EnvVarFallback(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	env.Getenv = func(k string) string {
+		if k == "JAM_SESSION" {
+			return "from-env"
+		}
+		return ""
+	}
+	if code := Execute([]string{"daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("start with JAM_SESSION env failed")
+	}
+	if _, err := session.Load(h.home, "", "from-env"); err != nil {
+		t.Errorf("expected session file at scope=from-env, got %v", err)
+	}
+}
+
 func TestDaemonStatus_ShowsRunningAndNotRunning(t *testing.T) {
 	h := newDaemonHarness(t)
 	env := h.env(t)

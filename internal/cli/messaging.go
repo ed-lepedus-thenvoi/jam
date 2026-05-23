@@ -27,8 +27,7 @@ import (
 // when the slash is present.
 var handleRegex = regexp.MustCompile(`@([A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)?)`)
 
-func loadSession(env Env, profile string) (*session.State, error) {
-	scope := session.Scope(env.Cwd)
+func loadSession(env Env, profile, scope string) (*session.State, error) {
 	st, err := session.Load(env.HomeDir, profile, scope)
 	if err != nil {
 		if errors.Is(err, session.ErrNotFound) {
@@ -175,7 +174,7 @@ func waitForPeerVisibility(client *band.Client, want []string, timeout time.Dura
 }
 
 
-func newSendCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newSendCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "send <chat_id> <message>",
 		Short: "Send a chat message; @-mentions in the text are resolved automatically",
@@ -188,7 +187,7 @@ func newSendCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *co
 			chatID, content := args[0], args[1]
 			profile := getProfile()
 
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}
@@ -225,13 +224,13 @@ func newSendCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *co
 	}
 }
 
-func newInboxCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newInboxCmd(stdout io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "inbox",
 		Short: "List pending inbound messages in this session's team inbox",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}
@@ -257,7 +256,7 @@ func newInboxCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Com
 	}
 }
 
-func newAckCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newAckCmd(stdout io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ack <message_id>",
 		Short: "Mark an inbound message processed without replying",
@@ -265,7 +264,7 @@ func newAckCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comma
 		RunE: func(cmd *cobra.Command, args []string) error {
 			msgID := args[0]
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}
@@ -291,7 +290,7 @@ func newAckCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Comma
 	}
 }
 
-func newReplyCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newReplyCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "reply <message_id> <text>",
 		Short: "Reply to an inbound message (auto-mentions sender, auto-marks processed)",
@@ -305,7 +304,7 @@ func newReplyCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *c
 		RunE: func(cmd *cobra.Command, args []string) error {
 			msgID, replyText := args[0], args[1]
 			profile := getProfile()
-			st, err := loadSession(env, profile)
+			st, err := loadSession(env, profile, getScope())
 			if err != nil {
 				return err
 			}

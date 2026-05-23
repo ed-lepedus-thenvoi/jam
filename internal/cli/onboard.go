@@ -38,7 +38,7 @@ Lifecycle:
 Log: %s
 `
 
-func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	var teamName, teammateName, agentName string
 	cmd := &cobra.Command{
 		Use:   "onboard",
@@ -57,7 +57,7 @@ func newOnboardCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfil
 				}
 				warnIfTeamNotMember(stderr, env.HomeDir, teamName)
 			}
-			st, _, err := ensureDaemonRunning(env, getProfile(), agentName, teamName, teammateName)
+			st, _, err := ensureDaemonRunning(env, getProfile(), getScope(), agentName, teamName, teammateName)
 			if err != nil {
 				return err
 			}

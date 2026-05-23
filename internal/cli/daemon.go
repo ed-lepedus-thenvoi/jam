@@ -26,25 +26,25 @@ const connectedMarker = "[Socket] Connected as"
 
 const connectTimeout = 30 * time.Second
 
-func newDaemonCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newDaemonCmd(stdin io.Reader, stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Manage the Band sockpuppet daemon for this working directory",
 	}
-	cmd.AddCommand(newDaemonStartCmd(stdout, stderr, env, getProfile))
-	cmd.AddCommand(newDaemonStopCmd(stdout, stderr, env, getProfile))
-	cmd.AddCommand(newDaemonStatusCmd(stdout, env, getProfile))
-	cmd.AddCommand(newDaemonRestartCmd(stdout, stderr, env, getProfile))
+	cmd.AddCommand(newDaemonStartCmd(stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newDaemonStopCmd(stdout, stderr, env, getProfile, getScope))
+	cmd.AddCommand(newDaemonStatusCmd(stdout, env, getProfile, getScope))
+	cmd.AddCommand(newDaemonRestartCmd(stdout, stderr, env, getProfile, getScope))
 	return cmd
 }
 
-func newDaemonStartCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newDaemonStartCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	var name, teamName, teammateName string
 	cmd := &cobra.Command{
 		Use:   "start",
-		Short: "Provision an agent and start the sockpuppet (idempotent per cwd)",
+		Short: "Provision an agent and start the sockpuppet (idempotent per cwd/session)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDaemonStart(stdout, env, getProfile(), name, teamName, teammateName)
+			return runDaemonStart(stdout, env, getProfile(), getScope(), name, teamName, teammateName)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Override the auto-derived agent name")
@@ -53,8 +53,8 @@ func newDaemonStartCmd(stdout, stderr io.Writer, env Env, getProfile func() stri
 	return cmd
 }
 
-func runDaemonStart(stdout io.Writer, env Env, profile, nameOverride, teamName, teammateName string) error {
-	st, already, err := ensureDaemonRunning(env, profile, nameOverride, teamName, teammateName)
+func runDaemonStart(stdout io.Writer, env Env, profile, scope, nameOverride, teamName, teammateName string) error {
+	st, already, err := ensureDaemonRunning(env, profile, scope, nameOverride, teamName, teammateName)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func runDaemonStart(stdout io.Writer, env Env, profile, nameOverride, teamName, 
 // ensureDaemonRunning is the idempotent core shared by `daemon start` and
 // `onboard`. Returns the live session state and a bool indicating whether the
 // daemon was already running (true) or was just started (false).
-func ensureDaemonRunning(env Env, profile, nameOverride, teamName, teammateName string) (*session.State, bool, error) {
+func ensureDaemonRunning(env Env, profile, scope, nameOverride, teamName, teammateName string) (*session.State, bool, error) {
 	cfg, err := loadConfigOrHint(env.HomeDir, profile)
 	if err != nil {
 		return nil, false, err
@@ -77,8 +77,6 @@ func ensureDaemonRunning(env Env, profile, nameOverride, teamName, teammateName 
 	if env.SpawnSockpuppet == nil {
 		return nil, false, errors.New("internal: SpawnSockpuppet not configured")
 	}
-
-	scope := session.Scope(env.Cwd)
 
 	if st, err := session.Load(env.HomeDir, profile, scope); err == nil {
 		if processAlive(st.PID) {
@@ -141,7 +139,7 @@ func ensureDaemonRunning(env Env, profile, nameOverride, teamName, teammateName 
 	return st, false, nil
 }
 
-func newDaemonStopCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newDaemonStopCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	var keep bool
 	cmd := &cobra.Command{
 		Use:   "stop",
@@ -157,7 +155,7 @@ func newDaemonStopCmd(stdout, stderr io.Writer, env Env, getProfile func() strin
 			if err != nil {
 				return err
 			}
-			scope := session.Scope(env.Cwd)
+			scope := getScope()
 			st, err := session.Load(env.HomeDir, profile, scope)
 			if err != nil {
 				if errors.Is(err, session.ErrNotFound) {
@@ -187,7 +185,7 @@ func newDaemonStopCmd(stdout, stderr io.Writer, env Env, getProfile func() strin
 	return cmd
 }
 
-func newDaemonRestartCmd(stdout, stderr io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newDaemonRestartCmd(stdout, stderr io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "restart",
 		Short: "Restart the bridge, preserving the agent identity (no register/delete)",
@@ -197,7 +195,7 @@ func newDaemonRestartCmd(stdout, stderr io.Writer, env Env, getProfile func() st
 			"run `jam onboard` first if you don't have a bridge yet.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile := getProfile()
-			scope := session.Scope(env.Cwd)
+			scope := getScope()
 			st, err := session.Load(env.HomeDir, profile, scope)
 			if err != nil {
 				if errors.Is(err, session.ErrNotFound) {
@@ -294,13 +292,13 @@ func spawnBridge(env Env, profile, scope string, cfg *config.Config, agentAPIKey
 	return pid, logPath, nil
 }
 
-func newDaemonStatusCmd(stdout io.Writer, env Env, getProfile func() string) *cobra.Command {
+func newDaemonStatusCmd(stdout io.Writer, env Env, getProfile, getScope func() string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show the sockpuppet status for this working directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile := getProfile()
-			scope := session.Scope(env.Cwd)
+			scope := getScope()
 			st, err := session.Load(env.HomeDir, profile, scope)
 			if err != nil {
 				if errors.Is(err, session.ErrNotFound) {
