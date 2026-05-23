@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 	"github.com/ed-lepedus-thenvoi/jam/internal/session"
 )
 
-// handleRegex matches @<owner>/<name> in message text. owner and name are
-// each one or more characters from a permissive identifier set. The leading @
-// is consumed but not captured.
-var handleRegex = regexp.MustCompile(`@([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)`)
+// handleRegex matches @<owner>/<name> (agent form) or @<slug> (human form)
+// in message text. The /<name> segment is optional so single-segment human
+// handles (e.g. `@ed.lepedus`) are captured alongside the longer agent form.
+// The leading @ is consumed but not captured. Greedy matching means full
+// agent handles are preferred over their prefix when the slash is present.
+var handleRegex = regexp.MustCompile(`@([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)`)
 
 func loadSession(env Env, profile string) (*session.State, error) {
 	scope := session.Scope(env.Cwd)
@@ -91,20 +94,27 @@ func resolveMentions(client *band.Client, selfHandle string, handles []string) (
 		return nil, fmt.Errorf("listing peers: %w", err)
 	}
 	mentions, missing := resolve(peers)
-	if len(missing) == 0 {
-		return mentions, nil
-	}
-
-	// Brief retry against a freshened peer list.
-	time.Sleep(500 * time.Millisecond)
-	peers, err = client.ListPeers()
-	if err != nil {
-		return nil, fmt.Errorf("listing peers (retry): %w", err)
-	}
-	mentions, missing = resolve(peers)
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("@%s not found in your peer network (have you joined a chat with them, or are they outside the visible peer page?)", missing[0])
+		// Brief retry against a freshened peer list.
+		time.Sleep(500 * time.Millisecond)
+		peers, err = client.ListPeers()
+		if err != nil {
+			return nil, fmt.Errorf("listing peers (retry): %w", err)
+		}
+		mentions, missing = resolve(peers)
+		if len(missing) > 0 {
+			return nil, fmt.Errorf("@%s not found in your peer network (have you joined a chat with them, or are they outside the visible peer page?)", missing[0])
+		}
 	}
+	// Sort longest-handle-first so the platform's String.replace_all pass
+	// substitutes full agent handles before their human-handle prefixes. Mixed
+	// human + agent mentions on the same owner (e.g. `@ed.lepedus` plus
+	// `@ed.lepedus/claude-foo`) and prefix-sharing agent pairs (`@alice/bob`
+	// plus `@alice/bob-junior`) both rely on this ordering or the shorter
+	// handle's substitution eats characters from the longer one.
+	sort.SliceStable(mentions, func(i, j int) bool {
+		return len(mentions[i].Handle) > len(mentions[j].Handle)
+	})
 	return mentions, nil
 }
 

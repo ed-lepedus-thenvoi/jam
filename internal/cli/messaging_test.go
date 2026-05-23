@@ -140,6 +140,78 @@ func TestSend_ResolvesHandleAndPosts(t *testing.T) {
 	}
 }
 
+func TestSend_ResolvesHumanAndAgentMentionsTogether(t *testing.T) {
+	h := newMsgHarness(t)
+	// Peers include both a human and an agent whose handle has the human's
+	// handle as a prefix — the exact collision pattern from the v0.1.3 bug.
+	h.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/agent/peers":
+			_, _ = w.Write([]byte(`{"data":[
+				{"id":"user-ed","name":"Ed Lepedus","handle":"ed.lepedus","type":"User"},
+				{"id":"peer-bob","name":"bob","handle":"ed.lepedus/bob","type":"Agent"}
+			]}`))
+		default:
+			if strings.HasSuffix(r.URL.Path, "/messages") {
+				body, _ := io.ReadAll(r.Body)
+				h.sendBody.Store(body)
+				_, _ = w.Write([]byte(`{"data":{"id":"sent-id"}}`))
+			} else {
+				w.WriteHeader(404)
+			}
+		}
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"send", "chat-1", "@ed.lepedus and @ed.lepedus/bob"},
+		nil, &stdout, &stderr, h.env())
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, stderr.String())
+	}
+	body := h.sentMessageBody(t)
+	mentions := body["message"].(map[string]any)["mentions"].([]any)
+	if len(mentions) != 2 {
+		t.Fatalf("expected 2 mentions (human + agent), got %d: %v", len(mentions), mentions)
+	}
+	// Long-handle-first ordering is critical so the platform's
+	// String.replace_all doesn't corrupt the agent mention via the
+	// human handle prefix.
+	if mentions[0].(map[string]any)["handle"] != "ed.lepedus/bob" {
+		t.Errorf("first mention must be the longer handle, got %v", mentions[0])
+	}
+	if mentions[1].(map[string]any)["handle"] != "ed.lepedus" {
+		t.Errorf("second mention must be the shorter handle, got %v", mentions[1])
+	}
+}
+
+func TestSend_LongFirstOrderingHoldsRegardlessOfTextOrder(t *testing.T) {
+	h := newMsgHarness(t)
+	h.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/agent/peers":
+			_, _ = w.Write([]byte(`{"data":[
+				{"id":"user-ed","name":"Ed Lepedus","handle":"ed.lepedus","type":"User"},
+				{"id":"peer-bob","name":"bob","handle":"ed.lepedus/bob","type":"Agent"}
+			]}`))
+		default:
+			if strings.HasSuffix(r.URL.Path, "/messages") {
+				body, _ := io.ReadAll(r.Body)
+				h.sendBody.Store(body)
+				_, _ = w.Write([]byte(`{"data":{"id":"x"}}`))
+			}
+		}
+	})
+	// Long-form first in text — sort must still produce the same order.
+	if code := Execute([]string{"send", "chat-1", "@ed.lepedus/bob then @ed.lepedus"},
+		nil, &bytes.Buffer{}, &bytes.Buffer{}, h.env()); code != 0 {
+		t.Fatalf("send failed")
+	}
+	mentions := h.sentMessageBody(t)["message"].(map[string]any)["mentions"].([]any)
+	if mentions[0].(map[string]any)["handle"] != "ed.lepedus/bob" {
+		t.Errorf("long handle must come first regardless of text order, got %v", mentions[0])
+	}
+}
+
 func TestSend_ErrorsWithoutMention(t *testing.T) {
 	h := newMsgHarness(t)
 	var stdout, stderr bytes.Buffer
