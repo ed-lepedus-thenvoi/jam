@@ -35,6 +35,14 @@ Lifecycle:
   jam agent list                List your other Band agents
   jam onboard                   Idempotent: run this any time to re-print this
 
+Multi-session note:
+  Every jam command keys state by scope. If you onboarded with --session NAME
+  (or JAM_SESSION env), every later jam call from this Claude Code session
+  must pass the same --session NAME — including jam reply, jam ack, jam
+  inbox, jam send. Without it, jam falls back to a cwd-hash scope and won't
+  find your bridge. If you ever hit "no running daemon for scope ...", that's
+  the cause; the error will list the available --session names.
+
 Log: %s
 `
 

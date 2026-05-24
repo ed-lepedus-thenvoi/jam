@@ -31,11 +31,36 @@ func loadSession(env Env, profile, scope string) (*session.State, error) {
 	st, err := session.Load(env.HomeDir, profile, scope)
 	if err != nil {
 		if errors.Is(err, session.ErrNotFound) {
-			return nil, errors.New("no running daemon for this cwd - run 'jam onboard' first")
+			return nil, missingSessionError(env.HomeDir, profile, scope,
+				fmt.Sprintf("no running daemon for scope %q", scope))
 		}
 		return nil, err
 	}
 	return st, nil
+}
+
+// missingSessionError builds the standard error for "this scope has no daemon"
+// callers. When other sessions exist for the same profile, it appends a list
+// of their --session names so users in a multi-session cwd don't bounce off
+// the cwd-hash default with no clue that other daemons are alive.
+func missingSessionError(homeDir, profile, scope, headline string) error {
+	all, _ := session.ListAll(homeDir)
+	var siblings []*session.State
+	for _, s := range all {
+		if s.Profile == profile && s.Scope != scope {
+			siblings = append(siblings, s)
+		}
+	}
+	if len(siblings) == 0 {
+		return fmt.Errorf("%s — run 'jam onboard' first", headline)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s. Other sessions in profile %q:\n", headline, profile)
+	for _, s := range siblings {
+		fmt.Fprintf(&b, "  --session %s   # %s (pid %d, cwd %s)\n", s.Scope, s.Handle, s.PID, s.Cwd)
+	}
+	b.WriteString("Pass --session NAME (or set JAM_SESSION) to target one, or run 'jam onboard' to start a new one.")
+	return errors.New(b.String())
 }
 
 // extractHandles returns each unique full handle (owner/name) referenced in

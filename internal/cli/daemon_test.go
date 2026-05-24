@@ -338,6 +338,30 @@ func TestSession_EnvVarFallback(t *testing.T) {
 	}
 }
 
+// When a daemon exists under a non-default scope (e.g. --session alice) but
+// the user invokes a command without --session, the resulting "no running
+// daemon" error must list the sibling scopes so the user can recover by
+// passing --session NAME — not just see a dead-end message.
+func TestSession_MissingScopeErrorListsSiblings(t *testing.T) {
+	h := newDaemonHarness(t)
+	env := h.env(t)
+	if code := Execute([]string{"--session", "alice", "daemon", "start"}, nil, &bytes.Buffer{}, &bytes.Buffer{}, env); code != 0 {
+		t.Fatal("alice start failed")
+	}
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"inbox"}, nil, &stdout, &stderr, env)
+	if code == 0 {
+		t.Fatalf("expected nonzero exit when no daemon at cwd-hash scope; stdout=%q", stdout.String())
+	}
+	got := stderr.String()
+	if !strings.Contains(got, "--session alice") {
+		t.Errorf("expected error to point at '--session alice', got: %s", got)
+	}
+	if !strings.Contains(got, "Other sessions in profile") {
+		t.Errorf("expected error to mention 'Other sessions in profile', got: %s", got)
+	}
+}
+
 func TestDaemonStatus_ShowsRunningAndNotRunning(t *testing.T) {
 	h := newDaemonHarness(t)
 	env := h.env(t)

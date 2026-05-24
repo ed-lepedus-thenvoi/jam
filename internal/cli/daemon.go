@@ -199,7 +199,8 @@ func newDaemonRestartCmd(stdout, stderr io.Writer, env Env, getProfile, getScope
 			st, err := session.Load(env.HomeDir, profile, scope)
 			if err != nil {
 				if errors.Is(err, session.ErrNotFound) {
-					return errors.New("no session state for this cwd; run 'jam onboard' first to bring a bridge online")
+					return missingSessionError(env.HomeDir, profile, scope,
+						fmt.Sprintf("no session state for scope %q; can't restart what isn't there", scope))
 				}
 				return err
 			}
